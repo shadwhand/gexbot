@@ -7,20 +7,7 @@ require('dotenv').config({ path: __dirname + '/.env' });
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-
-function findChrome() {
-  const candidates = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-  ];
-  for (const p of candidates) if (fs.existsSync(p)) return p;
-  return null;
-}
+const { findChrome, launchOptions, wait, goto, clickSelector } = require('./shared');
 
 const CONFIG = {
   url: 'https://app.optionsdepth.com/depth-view?tab=table',
@@ -36,22 +23,6 @@ const CONFIG = {
   chromeProfilePath: process.env.CHROME_PROFILE_PATH || path.join(__dirname, '..', '.chrome-scraper-profile'),
 };
 
-function launchOptions() {
-  const opts = {
-    headless: false,
-    defaultViewport: null,
-    args: [
-      '--no-sandbox',
-      '--new-window',
-      '--disable-blink-features=AutomationControlled',
-      '--user-data-dir=' + CONFIG.chromeProfilePath,
-    ],
-    ignoreDefaultArgs: ['--enable-automation'],
-  };
-  if (CONFIG.chromePath) opts.executablePath = CONFIG.chromePath;
-  return opts;
-}
-
 const EXTRACT_TABLE = (label, strikeFloor, colIdx) => `
   (() => {
     const rows = Array.from(document.querySelectorAll('tr[data-index]'));
@@ -66,23 +37,9 @@ const EXTRACT_TABLE = (label, strikeFloor, colIdx) => `
   })()
 `;
 
-const wait = ms => new Promise(r => setTimeout(r, ms));
-
-// Navigate with a fallback — don't rely on networkidle2 with real Chrome profiles
-async function goto(page, url) {
-  console.log('  Navigating to: ' + url);
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CONFIG.timeout });
-  } catch (e) {
-    // domcontentloaded timed out — page may still be usable
-    console.log('  (navigation timeout — continuing anyway)');
-  }
-  await wait(3000); // Let JS frameworks render
-}
-
 async function ensureLoggedIn(page) {
   console.log('Step 1: Opening optionsdepth...');
-  await goto(page, CONFIG.loginUrl);
+  await goto(page, CONFIG.loginUrl, CONFIG.timeout);
 
   console.log('Step 2: Checking login state...');
   const currentUrl = page.url();
@@ -166,21 +123,16 @@ async function loginWithEmail(page) {
   console.log('  Login complete');
 }
 
-async function clickSelector(page, selectors) {
-  for (const sel of selectors) {
-    try {
-      const el = await page.$(sel);
-      if (el) { await el.click(); await wait(500); return true; }
-    } catch (e) {}
-  }
-  return false;
-}
-
 async function openColumnPicker(page, pickerIndex = 1) {
-  return clickSelector(page, [
+  const clicked = await clickSelector(page, [
     `p:nth-of-type(${pickerIndex}) > svg`,
+    `p:nth-of-type(${pickerIndex}) > span`,
+    `p:nth-of-type(${pickerIndex})`,
     `div._depthViewWrapper_l6crd_81 p:nth-of-type(${pickerIndex}) > svg`,
+    `div._depthViewWrapper_l6crd_81 p:nth-of-type(${pickerIndex})`,
   ]);
+  if (!clicked) console.log('  WARNING: Could not open picker ' + pickerIndex);
+  return clicked;
 }
 
 async function selectMetric(page, metricId) {
@@ -189,7 +141,6 @@ async function selectMetric(page, metricId) {
     `[aria-label="${metricId}"]`,
   ]);
   if (!clicked) {
-    // Try clicking by visible text content as fallback
     let shortName = metricId.split('-')[0];
     if (shortName === 'NET_POSITION') shortName = 'Net Position';
     const textClicked = await page.evaluate((name) => {
@@ -242,40 +193,64 @@ async function switchToMetric(page, metric) {
 }
 
 async function setPositionType(page, type = 'ALL') {
+  process.stdout.write('  Setting position filter to ' + type + '... ');
   const typeMap = { ALL: 'A', C: 'C', P: 'P' };
   const letter = typeMap[type] || type;
-  const idVariants = [
-    '#' + letter + '-depth-view-options-metrics-chartId-null',
-    '#' + letter + '-Depth\\ View-metrics-chartId-null',
-  ];
-  let clicked = await clickSelector(page, idVariants);
+
+  // Open the "C & P" picker by clicking its <p> element directly
+  await page.evaluate(() => {
+    const ps = Array.from(document.querySelectorAll('p'));
+    const cp = ps.find(p => p.textContent.trim() === 'C & P');
+    if (cp) cp.click();
+  });
+  await wait(1000);
+
+  // Verify picker 2 opened by checking for its radio buttons (capitalized IDs)
+  let hasDropdown = await page.evaluate(() =>
+    !!document.querySelector('[id="A-Depth View-metrics-chartId-null"]')?.offsetParent
+  );
+
+  // Retry if dropdown didn't open
+  if (!hasDropdown) {
+    await openColumnPicker(page, 2);
+    await wait(1000);
+    hasDropdown = await page.evaluate(() =>
+      !!document.querySelector('[id="A-Depth View-metrics-chartId-null"]')?.offsetParent
+    );
+  }
+
+  if (!hasDropdown) {
+    console.log('WARNING: picker 2 dropdown did not open');
+  }
+
+  // Click the target radio button
+  let clicked = await clickSelector(page, [
+    `[id="${letter}-Depth View-metrics-chartId-null"]`,
+  ]);
   if (!clicked) {
-    const labels = type === 'ALL' ? ['All', 'A'] : type === 'C' ? ['Calls', 'C'] : ['Puts', 'P'];
-    clicked = await page.evaluate((lbls) => {
-      const els = Array.from(document.querySelectorAll('button, span, div, p'));
+    // Fallback: click by visible text within the open dropdown
+    const labels = type === 'ALL' ? ['All'] : type === 'C' ? ['Calls'] : ['Puts'];
+    clicked = await page.evaluate((lbls, ltr) => {
+      // Target only buttons with aria-checked (radio-style) to avoid clicking random text
+      const btns = Array.from(document.querySelectorAll('button[aria-checked]'));
       for (const lbl of lbls) {
-        for (const el of els) {
-          const text = el.textContent.trim();
-          if (text === lbl && el.children.length === 0 && el.offsetParent !== null) {
-            el.click();
+        for (const btn of btns) {
+          if (btn.textContent.trim() === lbl && btn.id.startsWith(ltr + '-') && btn.offsetParent) {
+            btn.click();
             return true;
           }
         }
       }
       return false;
-    }, labels);
+    }, labels, letter);
   }
   if (!clicked) {
-    const nearby = await page.evaluate(() => {
-      const els = Array.from(document.querySelectorAll('button, [role="tab"], [role="button"]'));
-      return els.slice(0, 20).map(e => ({ id: e.id, text: e.textContent.trim().substring(0, 20), tag: e.tagName }));
-    });
-    console.log('  WARNING: Could not click position type filter');
-    console.log('  Available buttons:', JSON.stringify(nearby, null, 2));
+    console.log('WARNING: Could not select position type "' + type + '"');
   }
-  await wait(2000);
-}
 
+  await clickApply(page);
+  console.log('done');
+}
 
 async function extractTable(page, label) {
   await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
@@ -283,7 +258,6 @@ async function extractTable(page, label) {
   console.log('  Extracted ' + result.rows.length + ' rows');
   return result;
 }
-
 
 async function getSpotPrice(page) {
   try {
@@ -300,104 +274,130 @@ async function getSpotPrice(page) {
   } catch (e) { return null; }
 }
 
-async function main() {
-  console.log('\n SPX Options Depth Scraper');
-  console.log(' ' + '-'.repeat(40) + '\n');
-
-  if (CONFIG.chromePath) console.log('Chrome:  ' + CONFIG.chromePath);
-  console.log('Profile: ' + CONFIG.chromeProfilePath + '\n');
-
-  const browser = await puppeteer.launch(launchOptions());
-  const page = await browser.newPage();
-  page.setDefaultTimeout(CONFIG.timeout);
-
-  try {
-    await ensureLoggedIn(page);
-
-    console.log('\nStep 3: Navigating to depth view...');
-    if (!page.url().includes('depth-view')) {
-      await goto(page, CONFIG.url);
-    } else {
-      await wait(2000);
-    }
-
-    console.log('Step 4: Waiting for table to render...');
-    await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
-    console.log('  Table found');
-
-    const spot = await getSpotPrice(page);
-    console.log('Spot: ' + (spot || 'not detected'));
-
-    const timestamp = new Date().toISOString();
-    const results = {
-      timestamp,
-      date: timestamp.split('T')[0],
-      time_et: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }),
-      spot: spot ? parseFloat(spot) : null,
-      vwap: null,
-      data: {}
-    };
-
-    console.log('\nStep 5: Extracting data...');
-
-    await switchToMetric(page, 'GEX');
-    await setPositionType(page, 'ALL');
-    results.data.gex = await extractTable(page, 'GEX');
-
-    await switchToMetric(page, 'CEX');
-    await setPositionType(page, 'ALL');
-    results.data.cex = await extractTable(page, 'CEX');
-
-    await switchToMetric(page, 'DEX');
-    await setPositionType(page, 'ALL');
-    results.data.dex = await extractTable(page, 'DEX');
-
-    await switchToMetric(page, 'VEX');
-    await setPositionType(page, 'ALL');
-    results.data.vex = await extractTable(page, 'VEX');
-
-    await switchToMetric(page, 'POSITION');
-    await setPositionType(page, 'ALL');
-    results.data.position = await extractTable(page, 'NET_POSITION');
-
-
-    fs.writeFileSync(CONFIG.outputPath, JSON.stringify(results, null, 2));
-
-    console.log('\n' + '='.repeat(50));
-    console.log('DATA READY');
-    console.log('='.repeat(50));
-    console.log('Time (ET): ' + results.time_et);
-    console.log('Spot:      ' + (spot || 'add manually'));
-    console.log('VWAP:      add manually\n');
-
-    console.log('GEX:\nStrike\tGEX');
-    results.data.gex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-
-    console.log('\nCEX ($M/5min):\nStrike\tCEX');
-    results.data.cex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-
-    console.log('\nDEX:\nStrike\tDEX');
-    results.data.dex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-
-    console.log('\nVEX ($M/1% IV):\nStrike\tVEX');
-    results.data.vex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-
-    console.log('\nNet Position:\nStrike\tPosition');
-    results.data.position.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-
-
-    console.log('\nDone.\n');
-
-  } catch (err) {
-    console.error('\nError: ' + err.message);
-    if (err.message.includes('user data directory is already in use')) {
-      console.error('\nFix: Close all Chrome windows and try again.');
-      console.error('Or set CHROME_PROFILE_PATH to a different directory in scripts/.env\n');
-    }
-    process.exit(1);
-  } finally {
-    await browser.close();
+/**
+ * Extract all optionsdepth data using an existing page.
+ * Used by scheduler to avoid re-launching browser.
+ */
+async function extractAllData(page) {
+  // Navigate to depth view if not already there
+  if (!page.url().includes('depth-view')) {
+    await goto(page, CONFIG.url, CONFIG.timeout);
+  } else {
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: CONFIG.timeout }).catch(() => {});
+    await wait(3000);
   }
+
+  await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
+
+  const spot = await getSpotPrice(page);
+  console.log('  Spot: ' + (spot || 'not detected'));
+
+  const data = {};
+
+  await switchToMetric(page, 'GEX');
+  data.gex = await extractTable(page, 'GEX');
+
+  await switchToMetric(page, 'CEX');
+  data.cex = await extractTable(page, 'CEX');
+
+  await switchToMetric(page, 'DEX');
+  data.dex = await extractTable(page, 'DEX');
+
+  await switchToMetric(page, 'VEX');
+  data.vex = await extractTable(page, 'VEX');
+
+  // Position: extract net and puts, derive calls = net - puts
+  await switchToMetric(page, 'POSITION');
+  await setPositionType(page, 'ALL');
+  data.position = await extractTable(page, 'NET_POSITION');
+
+  await setPositionType(page, 'P');
+  data.position_puts = await extractTable(page, 'POSITION_PUTS');
+
+  // Derive calls = net - puts
+  data.position_calls = {
+    label: 'POSITION_CALLS',
+    rows: data.position.rows.map(net => {
+      const putRow = data.position_puts.rows.find(p => p.strike === net.strike);
+      const netVal = parseFloat(net.value) || 0;
+      const putVal = putRow ? (parseFloat(putRow.value) || 0) : 0;
+      return { strike: net.strike, value: String(netVal - putVal) };
+    }),
+  };
+  console.log('  Derived ' + data.position_calls.rows.length + ' call position rows');
+
+  // Reset filter back to ALL for clean state
+  await setPositionType(page, 'ALL');
+
+  return { spot: spot ? parseFloat(spot) : null, data };
 }
 
-main();
+// Export for scheduler
+module.exports = { ensureLoggedIn, extractAllData, CONFIG };
+
+// Standalone execution
+if (require.main === module) {
+  (async () => {
+    console.log('\n SPX Options Depth Scraper');
+    console.log(' ' + '-'.repeat(40) + '\n');
+
+    if (CONFIG.chromePath) console.log('Chrome:  ' + CONFIG.chromePath);
+    console.log('Profile: ' + CONFIG.chromeProfilePath + '\n');
+
+    const browser = await puppeteer.launch(launchOptions(CONFIG.chromeProfilePath));
+    const page = await browser.newPage();
+    page.setDefaultTimeout(CONFIG.timeout);
+
+    try {
+      await ensureLoggedIn(page);
+
+      console.log('\nStep 3: Navigating to depth view...');
+      const { spot, data } = await extractAllData(page);
+
+      const timestamp = new Date().toISOString();
+      const results = {
+        timestamp,
+        date: timestamp.split('T')[0],
+        time_et: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }),
+        spot,
+        vwap: null,
+        data,
+      };
+
+      fs.writeFileSync(CONFIG.outputPath, JSON.stringify(results, null, 2));
+
+      console.log('\n' + '='.repeat(50));
+      console.log('DATA READY');
+      console.log('='.repeat(50));
+      console.log('Time (ET): ' + results.time_et);
+      console.log('Spot:      ' + (spot || 'add manually'));
+      console.log('VWAP:      add manually\n');
+
+      console.log('GEX:\nStrike\tGEX');
+      data.gex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nCEX ($M/5min):\nStrike\tCEX');
+      data.cex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nDEX:\nStrike\tDEX');
+      data.dex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nVEX ($M/1% IV):\nStrike\tVEX');
+      data.vex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nNet Position (All):\nStrike\tPosition');
+      data.position.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nPosition (Calls):\nStrike\tPosition');
+      data.position_calls.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nPosition (Puts):\nStrike\tPosition');
+      data.position_puts.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+      console.log('\nDone.\n');
+
+    } catch (err) {
+      console.error('\nError: ' + err.message);
+      if (err.message.includes('user data directory is already in use')) {
+        console.error('\nFix: Close all Chrome windows and try again.');
+        console.error('Or set CHROME_PROFILE_PATH to a different directory in scripts/.env\n');
+      }
+      process.exit(1);
+    } finally {
+      await browser.close();
+    }
+  })();
+}

@@ -1,7 +1,10 @@
 node_modules/
 scripts/.env
 .chrome-scraper-profile/
+.0dte-scraper-profile/
 latest_data.json
+latest_chain.json
+data/snapshots/
 .DS_Store
 *.backup.md
 analyze.md

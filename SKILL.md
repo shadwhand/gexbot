@@ -5,20 +5,37 @@ description: Use when analyzing SPX with auto-fetching from optionsdepth.com. Ge
 
 # SPX Directional Indicator v2.5
 
-## Data Files
-- **predictions.json:** `data/predictions.json`
-- **retrospectives.md:** `data/retrospectives.md`
-- **strategies.md:** `data/strategies.md`
-- **meic.md:** `data/meic.md`
-- **Reference docs:** `reference/` dir (concepts, examples, lessons) — read on-demand
+## Data Loading
+
+Only read files when the conversation needs them. Each tier includes all prior tiers.
+
+| Tier | Trigger | Files loaded |
+|------|---------|-------------|
+| 1 | Always | `SKILL.md` (this file) |
+| 2 | `/spx-gex-analyzer` or "analyze" | `latest_data.json`, `data/predictions.json` |
+| 3 | "how do strategies look?" / "what structures fit?" | + `data/strategies.md` |
+| 4 | "show me MEIC spreads" / "price an IC" | + `data/meic.md` (if MEIC), + `latest_chain.json` |
+| 5 | Explicit deep-dive request | + `reference/` files |
+
+**Tier 4 — Chain validation rules:** When recommending any trade structure (ICs, MEIC, BWBs, verticals, iron flies), read `latest_chain.json`. For each leg: show actual bid/ask/mid, compute net debit/credit from mids, flag spreads where `ask - bid > $1.00` (illiquid), flag legs where `volume < 100` (thin), use chain delta for short strike selection (e.g., MEIC targets 10-15 delta). If `latest_chain.json` is missing or stale (>30 min), note it and suggest `npm run fetch:chain`. Chain data is ~15-min delayed — sufficient for evaluation, not execution.
+
+**Do NOT read Tier N+1 files during a Tier N request.**
 
 ## Auto-Fetch
-```bash
-npm run fetch
-```
-Outputs GEX/CEX/DEX/VEX/Net Position to `latest_data.json` + stdout. Strikes ±100 of spot (floor adjustable via `STRIKE_FLOOR` env var in `scripts/.env`). VWAP and call positioning must be provided manually. Derive puts as `Net - Calls`.
 
-Setup: `npm install && cp scripts/.env.example scripts/.env` (edit with optionsdepth creds).
+**One-shot:**
+```bash
+npm run fetch        # optionsdepth GEX/CEX/DEX/VEX/Position
+npm run fetch:0dte   # 0dtespx.com SPX spot, VIX, EM
+```
+
+**Scheduled (10-min intervals during market hours):**
+```bash
+npm run scheduler
+```
+Runs 9:30 AM – 4:00 PM ET. Fetches both sources every 10 minutes, merges into `latest_data.json`, saves snapshots to `data/snapshots/YYYY-MM-DD/HH-MM.json`. Spot, VIX, and EM auto-populated from 0dtespx.com. Only VWAP remains manual.
+
+Setup: `npm install && cp scripts/.env.example scripts/.env` (edit with optionsdepth creds). The 0dtespx scraper needs no credentials.
 
 ---
 
@@ -144,6 +161,8 @@ Hedge Line / Profile / Call-Put Skew / Squeeze Risk / Upside Aspiration
 Prediction ID: [short-id]
 ═══════════════════════════════════════════
 ```
+
+---
 
 ## Feedback
 `/feedback [id] +1|0|-1` → update predictions.json, print running accuracy + signal hit rates.

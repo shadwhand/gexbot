@@ -113,9 +113,9 @@ The scraper uses a dedicated Chrome profile to avoid conflicts with your main br
 
 ```
 ├── SKILL.md                 # Core analytical framework (loaded every invocation)
-├── BWB.md                   # Broken-wing butterfly strategy (loaded on demand)
 ├── scripts/
 │   ├── fetch_data.js        # Puppeteer scraper for optionsdepth.com
+│   ├── fetch_chain.py       # Options chain via yfinance (bid/ask/delta/volume)
 │   └── .env.example         # Config template
 ├── reference/
 │   ├── concepts.md          # Detailed signal theory (loaded on demand)

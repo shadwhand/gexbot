@@ -4,6 +4,9 @@
   "description": "SPX GEX/CEX directional indicator — automated data fetching via system Chrome",
   "scripts": {
     "fetch": "node scripts/fetch_data.js",
+    "fetch:0dte": "node scripts/fetch_0dte.js",
+    "scheduler": "node scripts/scheduler.js",
+    "fetch:chain": "python3 scripts/fetch_chain.py",
     "reset-cookies": "rm -f scripts/.session_cookies.json && echo 'Cookies cleared'"
   },
   "dependencies": {
