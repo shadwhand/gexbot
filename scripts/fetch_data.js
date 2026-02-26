@@ -23,17 +23,16 @@ const CONFIG = {
   chromeProfilePath: process.env.CHROME_PROFILE_PATH || path.join(__dirname, '..', '.chrome-scraper-profile'),
 };
 
-const EXTRACT_TABLE = (label, strikeFloor, colIdx) => `
+const EXTRACT_VISIBLE_ROWS = (strikeFloor, colIdx) => `
   (() => {
     const rows = Array.from(document.querySelectorAll('tr[data-index]'));
-    const data = rows.map(row => {
+    return rows.map(row => {
       const cells = row.querySelectorAll('td');
       const strike = cells[0]?.textContent.trim();
       const col = cells[${colIdx}]?.querySelector('div')?.textContent.trim()
                 || cells[${colIdx}]?.textContent.trim();
       return { strike: parseInt(strike), value: col };
     }).filter(r => r.strike && r.strike >= ${strikeFloor} && r.value);
-    return { label: '${label}', rows: data };
   })()
 `;
 
@@ -254,9 +253,72 @@ async function setPositionType(page, type = 'ALL') {
 
 async function extractTable(page, label) {
   await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
-  const result = await page.evaluate(EXTRACT_TABLE(label, CONFIG.strikeFloor, CONFIG.columnIndex));
-  console.log('  Extracted ' + result.rows.length + ' rows');
-  return result;
+
+  // Find the scrollable table container
+  const containerSel = await page.evaluate(() => {
+    // Look for the scrollable parent of the table rows
+    let el = document.querySelector('tr[data-index]');
+    while (el) {
+      el = el.parentElement;
+      if (el && (el.scrollHeight > el.clientHeight + 10) && el.clientHeight > 100) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  // Scroll through the table and accumulate all rows
+  const allRows = new Map();
+
+  const collectVisible = async () => {
+    const rows = await page.evaluate(EXTRACT_VISIBLE_ROWS(CONFIG.strikeFloor, CONFIG.columnIndex));
+    for (const row of rows) {
+      allRows.set(row.strike, row);
+    }
+  };
+
+  // Scroll to top first
+  await page.evaluate(() => {
+    let el = document.querySelector('tr[data-index]');
+    while (el) {
+      el = el.parentElement;
+      if (el && el.scrollHeight > el.clientHeight + 10 && el.clientHeight > 100) {
+        el.scrollTop = 0;
+        return;
+      }
+    }
+  });
+  await wait(300);
+  await collectVisible();
+
+  // Scroll down incrementally
+  let prevSize = 0;
+  let staleCount = 0;
+  while (staleCount < 3) {
+    await page.evaluate(() => {
+      let el = document.querySelector('tr[data-index]');
+      while (el) {
+        el = el.parentElement;
+        if (el && el.scrollHeight > el.clientHeight + 10 && el.clientHeight > 100) {
+          el.scrollTop += el.clientHeight * 0.8;
+          return;
+        }
+      }
+    });
+    await wait(200);
+    await collectVisible();
+
+    if (allRows.size === prevSize) {
+      staleCount++;
+    } else {
+      staleCount = 0;
+    }
+    prevSize = allRows.size;
+  }
+
+  const rows = Array.from(allRows.values()).sort((a, b) => b.strike - a.strike);
+  console.log('  Extracted ' + rows.length + ' rows');
+  return { label, rows };
 }
 
 async function getSpotPrice(page) {

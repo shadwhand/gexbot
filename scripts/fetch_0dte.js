@@ -46,12 +46,28 @@ async function fetch0dte(existingPage, date) {
       console.log('Launching browser for 0dtespx.com...');
       browser = await puppeteer.launch(launchOptions(PROFILE_DIR));
       page = await browser.newPage();
+      await page.setViewport({ width: 1440, height: 900 });
       page.setDefaultTimeout(TIMEOUT);
     }
 
     const url = buildUrl(date);
     await goto(page, url, TIMEOUT);
     await wait(8000); // SvelteKit render + chart data load
+
+    // Scroll the browser window fully to the right so latest data is visible
+    // Use End key and arrow keys to ensure the page scrolls horizontally
+    await page.keyboard.press('End');
+    await wait(500);
+    // Scroll right repeatedly with arrow keys
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press('ArrowRight');
+    }
+    await wait(500);
+    // Also try JS scroll as backup
+    await page.evaluate(() => {
+      window.scrollTo(document.documentElement.scrollWidth, window.scrollY);
+    });
+    await wait(2000); // let scroll settle and chart re-render
 
     // Find the main chart canvas (widest one)
     const canvasInfo = await page.evaluate(() => {
@@ -75,19 +91,45 @@ async function fetch0dte(existingPage, date) {
 
     // Sweep from right edge inward to find the latest data point.
     // Historical dates fill the chart; live data stops near the middle.
+    // Use fine-grained sweep near the right edge for most recent data.
     const y = canvasInfo.y + canvasInfo.height * 0.5;
     let data = { spx: null, em: null, vix: null };
+    let bestData = null;
+    let bestPct = 0;
 
-    for (const pct of [0.98, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50, 0.40]) {
+    // First pass: find rightmost data point with fine granularity
+    for (const pct of [0.99, 0.98, 0.97, 0.96, 0.95, 0.93, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50, 0.40]) {
       const x = canvasInfo.x + canvasInfo.width * pct;
       await page.mouse.move(x, y);
-      await wait(800);
+      await wait(600);
       data = await readTooltip(page);
       if (data.spx) {
-        console.log('  Found data at ' + Math.round(pct * 100) + '% (' + Math.round(x) + ', ' + Math.round(y) + ')');
+        if (!bestData) {
+          bestData = { ...data };
+          bestPct = pct;
+          console.log('  Found data at ' + Math.round(pct * 100) + '% (' + Math.round(x) + ', ' + Math.round(y) + ')');
+        }
         break;
       }
     }
+
+    // If found, do a fine sweep rightward from that point to get the absolute latest
+    if (bestData && bestPct < 0.99) {
+      for (const offset of [0.01, 0.005, 0.002]) {
+        const finePct = bestPct + offset;
+        if (finePct > 1.0) continue;
+        const x = canvasInfo.x + canvasInfo.width * finePct;
+        await page.mouse.move(x, y);
+        await wait(400);
+        const fineData = await readTooltip(page);
+        if (fineData.spx && fineData.spx !== bestData.spx) {
+          bestData = { ...fineData };
+          console.log('  Refined to ' + Math.round(finePct * 100) + '% — SPX=' + fineData.spx);
+        }
+      }
+    }
+
+    data = bestData || data;
 
     console.log('  SPX=' + (data.spx || '?') + ' EM=' + (data.em || '?') + ' VIX=' + (data.vix || '?'));
     return { data, browser, page };

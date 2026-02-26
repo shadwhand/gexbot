@@ -19,7 +19,7 @@ const { ensureLoggedIn, extractAllData, CONFIG: odConfig } = require('./fetch_da
 const { fetch0dte, PROFILE_DIR: zeroProfileDir } = require('./fetch_0dte');
 
 const INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-const MARKET_START_OFFSET = 5; // minutes after 9:30 to wait (data lags ~4-5 min)
+const MARKET_START_OFFSET = 4; // minutes after 9:30 to wait; ticks at :X4 (:04, :14, :24, ...)
 const BASE_DIR = path.join(__dirname, '..');
 const OUTPUT_PATH = path.join(BASE_DIR, 'latest_data.json');
 
@@ -164,8 +164,8 @@ async function shutdown() {
 async function main() {
   console.log('\n SPX Data Scheduler');
   console.log(' ' + '-'.repeat(40));
-  console.log(' Interval: 10 minutes (starting at :35, then :45, :55, ...)');
-  console.log(' Market hours: 9:35 AM – 4:00 PM ET (5-min offset for data lag)\n');
+  console.log(' Interval: 10 minutes (ticks at :04, :14, :24, :34, :44, :54)');
+  console.log(' Market hours: 9:34 AM – 4:00 PM ET\n');
 
   // Graceful shutdown
   process.on('SIGINT', shutdown);
@@ -182,7 +182,7 @@ async function main() {
     const startMinute = 570 + MARKET_START_OFFSET; // 9:35 AM
     if (minutes < startMinute) {
       const waitMs = (startMinute - minutes) * 60 * 1000;
-      log('Pre-market. Waiting ' + Math.round(waitMs / 60000) + ' min until 9:35 AM ET...');
+      log('Pre-market. Waiting ' + Math.round(waitMs / 60000) + ' min until 9:34 AM ET...');
       await wait(waitMs);
     } else {
       log('After hours — markets closed. Exiting.');
@@ -208,10 +208,11 @@ async function main() {
   // Initial fetch
   await tick();
 
-  // Align next tick to the :X5 schedule (e.g. :35, :45, :55, :05, ...)
+  // Align next tick to the :X4 schedule (e.g. :04, :14, :24, :34, :44, :54)
   const nowMins = nowET().getMinutes();
-  const nextTickMin = (Math.floor(nowMins / 10) * 10 + MARKET_START_OFFSET % 10) % 60;
-  let delayToNext = ((nextTickMin - nowMins + 60) % 60) || 10; // default 10 if aligned
+  const offset = MARKET_START_OFFSET % 10; // 5
+  const minsIntoCycle = ((nowMins - offset) % 10 + 10) % 10;
+  const delayToNext = minsIntoCycle === 0 ? 10 : (10 - minsIntoCycle);
   const alignMs = delayToNext * 60 * 1000;
 
   log('Next tick in ~' + delayToNext + ' min (aligning to :X5 schedule). Ctrl+C to stop.');
