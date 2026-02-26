@@ -1,11 +1,342 @@
 {
   "version": "1.0",
   "signal_weights": {
-    "gex_regime": { "base": 0.25, "adjusted": 0.25, "hit_rate": null, "sample_count": 0 },
-    "cex_dominant": { "base": 0.30, "adjusted": 0.30, "hit_rate": null, "sample_count": 0 },
-    "vwap_aligned": { "base": 0.20, "adjusted": 0.20, "hit_rate": null, "sample_count": 0 },
-    "confluence": { "base": 0.15, "adjusted": 0.15, "hit_rate": null, "sample_count": 0 },
-    "time_of_day": { "base": 0.10, "adjusted": 0.10, "hit_rate": null, "sample_count": 0 }
+    "gex_regime": { "base": 0.25, "adjusted": 0.25, "hit_rate": 0.50, "sample_count": 6 },
+    "cex_dominant": { "base": 0.30, "adjusted": 0.30, "hit_rate": 0.62, "sample_count": 13 },
+    "vwap_aligned": { "base": 0.20, "adjusted": 0.20, "hit_rate": 0.50, "sample_count": 8 },
+    "confluence": { "base": 0.15, "adjusted": 0.25, "hit_rate": 0.83, "sample_count": 12 },
+    "time_of_day": { "base": 0.10, "adjusted": 0.20, "hit_rate": 0.80, "sample_count": 10 }
   },
-  "predictions": []
+  "predictions": [
+    {
+      "id": "bear-0224a",
+      "date": "2026-02-24",
+      "time": "09:30",
+      "spot": 6843,
+      "vwap": null,
+      "call": "BEAR",
+      "confidence": 3,
+      "target_low": 6810,
+      "target_high": 6825,
+      "stop": null,
+      "close": 6890,
+      "score": -1,
+      "notes": "Morning bear thesis. Spot touched 6825 briefly but rallied 65+ pts. GEX regime was transitioning negative→positive. Wrong for session direction.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "negative_transitional", "aligned": true },
+        "cex_dominant": { "active": true, "value": "bearish_aligned", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "below", "aligned": true },
+        "confluence": { "active": false, "value": null, "aligned": false },
+        "time_of_day": { "active": false, "value": "morning_gex_dominant", "aligned": false }
+      }
+    },
+    {
+      "id": "bull-0224b",
+      "date": "2026-02-24",
+      "time": "10:30",
+      "spot": 6865,
+      "vwap": null,
+      "call": "BULL",
+      "confidence": 3,
+      "target_low": 6880,
+      "target_high": 6895,
+      "stop": null,
+      "close": 6890,
+      "score": 1,
+      "notes": "Shifted bullish as regime turned positive. Target range 6880-6895 hit. Correct direction.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "positive_mean_reverting", "aligned": true },
+        "cex_dominant": { "active": true, "value": "bullish_aligned", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "above", "aligned": true },
+        "confluence": { "active": true, "value": "gex_cex_aligned", "aligned": true },
+        "time_of_day": { "active": false, "value": "morning_gex_dominant", "aligned": false }
+      }
+    },
+    {
+      "id": "neut-0224c",
+      "date": "2026-02-24",
+      "time": "12:00",
+      "spot": 6883,
+      "vwap": null,
+      "call": "NEUTRAL",
+      "confidence": 3,
+      "target_low": 6875,
+      "target_high": 6905,
+      "stop": null,
+      "close": 6890,
+      "score": 1,
+      "notes": "Range-bound call. Spot stayed in 6880-6895 box. Correct regime read.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "positive_mean_reverting", "aligned": true },
+        "cex_dominant": { "active": false, "value": "mixed", "aligned": false },
+        "vwap_aligned": { "active": false, "value": null, "aligned": false },
+        "confluence": { "active": true, "value": "range_bound_structure", "aligned": true },
+        "time_of_day": { "active": true, "value": "midday_balanced", "aligned": true }
+      }
+    },
+    {
+      "id": "neut-0224d",
+      "date": "2026-02-24",
+      "time": "14:00",
+      "spot": 6890,
+      "vwap": null,
+      "call": "NEUTRAL",
+      "confidence": 3,
+      "target_low": 6880,
+      "target_high": 6900,
+      "stop": null,
+      "close": 6890,
+      "score": 1,
+      "notes": "Held neutral/range thesis. Close at 6890 confirmed. Pin prediction 6884-6887, off by 3-6 pts.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "positive_mean_reverting", "aligned": true },
+        "cex_dominant": { "active": false, "value": "mixed", "aligned": false },
+        "vwap_aligned": { "active": false, "value": null, "aligned": false },
+        "confluence": { "active": true, "value": "range_bound_pin", "aligned": true },
+        "time_of_day": { "active": true, "value": "afternoon_cex_rising", "aligned": true }
+      }
+    },
+    {
+      "id": "spx-20250225-1311a",
+      "date": "2026-02-25",
+      "time": "13:11",
+      "spot": 6942,
+      "vwap": null,
+      "call": "NEUTRAL",
+      "confidence": 3,
+      "target_low": 6935,
+      "target_high": 6953,
+      "stop": 6928,
+      "close": 6946.14,
+      "score": 0,
+      "notes": "Range correct (6946.14 within 6935-6953). Direction neutral but actual was bull (+21 from open). Conservative without VWAP.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "mixed_transitional", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6930_supportive_-42.8", "aligned": true },
+        "vwap_aligned": { "active": false, "value": null, "aligned": false },
+        "confluence": { "active": true, "value": "6930_triple_support", "aligned": true },
+        "time_of_day": { "active": true, "value": "2h49m_balanced", "aligned": false }
+      }
+    },
+    {
+      "id": "spx-20250225-1321a",
+      "date": "2026-02-25",
+      "time": "13:21",
+      "spot": 6942,
+      "vwap": 6909,
+      "call": "BULL",
+      "confidence": 4,
+      "target_low": 6942,
+      "target_high": 6953,
+      "stop": 6928,
+      "close": 6946.14,
+      "score": 1,
+      "notes": "Direction correct (bull). Close within range. VWAP addition drove upgrade from neutral to bull — correct decision.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "mixed_transitional", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6930_supportive_-51.1", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "+33pts_above", "aligned": true },
+        "confluence": { "active": true, "value": "6930_triple_support", "aligned": true },
+        "time_of_day": { "active": true, "value": "2h39m_balanced", "aligned": false }
+      }
+    },
+    {
+      "id": "spx-20250225-1353a",
+      "date": "2026-02-25",
+      "time": "13:53",
+      "spot": 6942,
+      "vwap": 6909,
+      "call": "NEUTRAL",
+      "confidence": 3,
+      "target_low": 6935,
+      "target_high": 6950,
+      "stop": 6928,
+      "close": 6946.14,
+      "score": 0,
+      "notes": "Range correct (6946.14 within 6935-6950). Downgraded from bull due to 6940 wall collapse. Direction neutral — actual stayed bullish.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "mixed_negative_tilt", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6930_support_vs_6955_suppress", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "+33pts_above", "aligned": true },
+        "confluence": { "active": true, "value": "6935_support_growing", "aligned": true },
+        "time_of_day": { "active": true, "value": "2h7m_balanced", "aligned": false }
+      }
+    },
+    {
+      "id": "spx-20250225-1520a",
+      "date": "2026-02-25",
+      "time": "15:20",
+      "spot": 6947,
+      "vwap": 6911,
+      "call": "BULL",
+      "confidence": 4,
+      "target_low": 6947,
+      "target_high": 6952,
+      "stop": 6943,
+      "close": 6946.14,
+      "score": 1,
+      "notes": "Direction correct (bull held). Close 0.86 pts below target low — near miss on range. Charm acceleration correctly identified but pin target too optimistic.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "heavily_negative_6945_dominant", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6945_massive_support_-144.37", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "+36pts_above", "aligned": true },
+        "confluence": { "active": true, "value": "6945_triple_negGEX_negCEX_hedgeline", "aligned": true },
+        "time_of_day": { "active": true, "value": "40min_cex_85pct", "aligned": true }
+      }
+    },
+    {
+      "id": "spx-20250225-1528a",
+      "date": "2026-02-25",
+      "time": "15:28",
+      "spot": 6947,
+      "vwap": 6911,
+      "call": "BULL",
+      "confidence": 4,
+      "target_low": 6948,
+      "target_high": 6951,
+      "stop": 6943,
+      "close": 6946.14,
+      "score": 1,
+      "notes": "Direction correct. Pin at 6950 missed by 3.86 pts. CEX migration from 6945 to 6940 correctly identified — should have shifted pin target down.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "heavily_negative", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6940_peak_support_-145.38", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "+36pts_above", "aligned": true },
+        "confluence": { "active": true, "value": "6950_pin_wall+cex_supportive", "aligned": true },
+        "time_of_day": { "active": true, "value": "32min_cex_95pct", "aligned": true }
+      }
+    },
+    {
+      "id": "pred-0226-1448",
+      "date": "2026-02-26",
+      "time": "14:48",
+      "spot": 6907.33,
+      "vwap": 6915,
+      "call": "NEUTRAL",
+      "confidence": 3,
+      "target_low": 6903,
+      "target_high": 6910,
+      "stop": 6895,
+      "close": 6908.89,
+      "score": 1,
+      "notes": "First read of resumed session. Pin thesis at 6905-6907 based on 6905 amp (-22.7) as fulcrum. Close 6908.89 within range.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "trending_-20.4", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6905_magnet_-6.6", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "-7.7pts_below", "aligned": false },
+        "confluence": { "active": true, "value": "6905_amp+magnet_reinforcing", "aligned": true },
+        "time_of_day": { "active": true, "value": "72min_cex_0.70", "aligned": true }
+      }
+    },
+    {
+      "id": "pred-0226-1456",
+      "date": "2026-02-26",
+      "time": "14:56",
+      "spot": 6910,
+      "vwap": 6915,
+      "call": "NEUTRAL",
+      "confidence": 4,
+      "target_low": 6908,
+      "target_high": 6912,
+      "stop": 6900,
+      "close": 6908.89,
+      "score": 1,
+      "notes": "Best call of session. 6910 coupling RESOLVED (wall +18.8, magnet -10.6). Pin at 6910 predicted, close 6908.89 — off by 1.1 pts.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "trending_-17.6", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6910_magnet_-10.6_resolved", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "-5pts_below", "aligned": false },
+        "confluence": { "active": true, "value": "6910_wall+magnet_6915_monster_barrier", "aligned": true },
+        "time_of_day": { "active": true, "value": "64min_cex_0.70", "aligned": true }
+      }
+    },
+    {
+      "id": "pred-0226-1509",
+      "date": "2026-02-26",
+      "time": "15:09",
+      "spot": 6907.5,
+      "vwap": 6915,
+      "call": "NEUTRAL",
+      "confidence": 4,
+      "target_low": 6908,
+      "target_high": 6912,
+      "stop": 6900,
+      "close": 6908.89,
+      "score": 1,
+      "notes": "Held pin thesis from 14:56. 6910 wall surged to +18.8, magnet tripled to -27.8. Correctly maintained conviction.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "trending_-19.5", "aligned": false },
+        "cex_dominant": { "active": true, "value": "6910_magnet_-27.8", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "-7.5pts_below", "aligned": false },
+        "confluence": { "active": true, "value": "6910_wall+magnet_reinforcing", "aligned": true },
+        "time_of_day": { "active": true, "value": "51min_cex_0.85", "aligned": true }
+      }
+    },
+    {
+      "id": "pred-0226-1515",
+      "date": "2026-02-26",
+      "time": "15:15",
+      "spot": 6908.52,
+      "vwap": 6915,
+      "call": "BEAR",
+      "confidence": 3,
+      "target_low": 6900,
+      "target_high": 6908,
+      "stop": 6915,
+      "close": 6908.89,
+      "score": 0,
+      "notes": "Shifted bearish as 6895 magnet doubled to -53.6. Close 6908.89 just 0.89 above target range. Overweighted magnet growth, underweighted 6900 floor.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "strongly_trending_-39.4", "aligned": true },
+        "cex_dominant": { "active": true, "value": "6895_mega_magnet_-53.6", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "-6.5pts_below", "aligned": true },
+        "confluence": { "active": true, "value": "6895_reinforcing_support_mega", "aligned": false },
+        "time_of_day": { "active": true, "value": "45min_cex_0.85", "aligned": true }
+      }
+    },
+    {
+      "id": "pred-0226-1525",
+      "date": "2026-02-26",
+      "time": "15:25",
+      "spot": 6904,
+      "vwap": 6915,
+      "call": "BEAR",
+      "confidence": 3,
+      "target_low": 6895,
+      "target_high": 6902,
+      "stop": 6910,
+      "close": 6908.89,
+      "score": -1,
+      "notes": "Worst call. Chased -58.4 magnet + -42.7 net GEX. Close 6.89 pts above target. CEX magnitude ≠ directional pull.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "strongly_trending_-42.7", "aligned": true },
+        "cex_dominant": { "active": true, "value": "6895_mega_magnet_-58.4", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "-11pts_below", "aligned": true },
+        "confluence": { "active": true, "value": "6900_floor_holding", "aligned": false },
+        "time_of_day": { "active": true, "value": "35min_cex_0.90", "aligned": true }
+      }
+    },
+    {
+      "id": "pred-0226-1534",
+      "date": "2026-02-26",
+      "time": "15:34",
+      "spot": 6907,
+      "vwap": 6915,
+      "call": "NEUTRAL",
+      "confidence": 3,
+      "target_low": 6900,
+      "target_high": 6910,
+      "stop": 6895,
+      "close": 6908.89,
+      "score": 1,
+      "notes": "Recovered from bear error. Competing magnets (6910 vs 6895) → widened range. Close 6908.89 within range.",
+      "signals": {
+        "gex_regime": { "active": true, "value": "extremely_trending_-75.4", "aligned": false },
+        "cex_dominant": { "active": true, "value": "competing_magnets_6910_vs_6895", "aligned": true },
+        "vwap_aligned": { "active": true, "value": "-8pts_below", "aligned": false },
+        "confluence": { "active": true, "value": "6905_trap_vs_6910_magnet", "aligned": true },
+        "time_of_day": { "active": true, "value": "26min_cex_0.95", "aligned": true }
+      }
+    }
+  ]
 }

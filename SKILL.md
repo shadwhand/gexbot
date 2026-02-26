@@ -3,39 +3,23 @@ name: spx-gex-analyzer
 description: Use when analyzing SPX with auto-fetching from optionsdepth.com. Generates directional bias calls using GEX, CEX, DEX, VEX, Positioning, VWAP, and Expected Move data. Use /spx-gex-analyzer or /analyze with no data to auto-fetch.
 ---
 
-# SPX Directional Indicator v2.5
+# SPX Directional Indicator v2.6
 
-## Data Loading
-
-Only read files when the conversation needs them. Each tier includes all prior tiers.
-
-| Tier | Trigger | Files loaded |
-|------|---------|-------------|
-| 1 | Always | `SKILL.md` (this file) |
-| 2 | `/spx-gex-analyzer` or "analyze" | `latest_data.json`, `data/predictions.json` |
-| 3 | "how do strategies look?" / "what structures fit?" | + `data/strategies.md` |
-| 4 | "show me MEIC spreads" / "price an IC" | + `data/meic.md` (if MEIC), + `latest_chain.json` |
-| 5 | Explicit deep-dive request | + `reference/` files |
-
-**Tier 4 — Chain validation rules:** When recommending any trade structure (ICs, MEIC, BWBs, verticals, iron flies), read `latest_chain.json`. For each leg: show actual bid/ask/mid, compute net debit/credit from mids, flag spreads where `ask - bid > $1.00` (illiquid), flag legs where `volume < 100` (thin), use chain delta for short strike selection (e.g., MEIC targets 10-15 delta). If `latest_chain.json` is missing or stale (>30 min), note it and suggest `npm run fetch:chain`. Chain data is ~15-min delayed — sufficient for evaluation, not execution.
-
-**Do NOT read Tier N+1 files during a Tier N request.**
+## Data Files
+- **predictions.json:** `data/predictions.json` in this skill
+- **retrospectives.md:** `data/retrospectives.md` in this skill
+- **strategies.md:** `data/strategies.md` in this skill
+- **meic.md:** `data/meic.md` in this skill
+- **BWB strategy:** `BWB.md` in this skill — read when walls qualify or user requests `/bwb`
+- **Reference docs:** `reference/` dir in this skill (concepts, examples, lessons) — read on-demand
 
 ## Auto-Fetch
-
-**One-shot:**
 ```bash
-npm run fetch        # optionsdepth GEX/CEX/DEX/VEX/Position
-npm run fetch:0dte   # 0dtespx.com SPX spot, VIX, EM
+cd ~/.claude/skills/spx-gex-analyzer && npm run fetch
 ```
+Outputs GEX/CEX/DEX/VEX/Net Position to `latest_data.json` + stdout. Strikes ±100 of spot (floor default 6800, adjustable via `STRIKE_FLOOR` env var). VWAP and call positioning must be provided manually. Derive puts as `Net - Calls`.
 
-**Scheduled (10-min intervals during market hours):**
-```bash
-npm run scheduler
-```
-Runs 9:30 AM – 4:00 PM ET. Fetches both sources every 10 minutes, merges into `latest_data.json`, saves snapshots to `data/snapshots/YYYY-MM-DD/HH-MM.json`. Spot, VIX, and EM auto-populated from 0dtespx.com. Only VWAP remains manual.
-
-Setup: `npm install && cp scripts/.env.example scripts/.env` (edit with optionsdepth creds). The 0dtespx scraper needs no credentials.
+Setup: `npm install && cp scripts/.env.example scripts/.env` (edit with optionsdepth creds).
 
 ---
 
@@ -92,6 +76,8 @@ Gap = VWAP - spot. Positive = upside bias. Negative = downside bias. -CEX near V
 
 ### 5. Time-of-Day Weighting
 
+These weights apply to the *directional call*, not to level importance — a GEX wall still matters at 3:30 PM as a level, even though CEX dominates the directional read.
+
 | Time Left | CEX Wt | GEX Wt |
 |-----------|--------|--------|
 | >3h | 0.40 | 0.60 |
@@ -100,11 +86,36 @@ Gap = VWAP - spot. Positive = upside bias. Negative = downside bias. -CEX near V
 | <1h | 0.85 | 0.15 |
 | <30m | 0.95 | 0.05 |
 
+### 5b. Gamma-Charm Coupling
+
+GEX and CEX derive from the same OI. Their per-strike alignment in the 1-2h window is highly predictive of the close.
+
+**Gamma Intensity:** GEX magnitudes grow 3-5x midday→close (time decay, no new OI). Amplifiers grow faster than walls.
+
+**Coupling States:**
+
+| GEX | CEX | State |
+|-----|-----|-------|
+| -GEX (amp) | -CEX (support) | Reinforcing support — likely pin zone |
+| -GEX (amp) | +CEX (suppress) | Conflicting — watch for CEX flip |
+| +GEX (wall) | +CEX (suppress) | Reinforcing resistance — hard ceiling |
+| +GEX (wall) | -CEX (support) | Conflicting — wall may break |
+
+**CEX flip at dominant amplifier (1-2h out) = close predictor.** Conflicting→reinforcing = that strike becomes likely close. (2/25: 6945 flipped at R4. Close: 6946.14.)
+
+**Amplifier-Pin Ratio:** Amplifier >10x adjacent wall → discount pin. `equilibrium ≈ amp + (wall - amp) × wall_GEX / (|amp_GEX| + wall_GEX)`
+
+**Coupling Stability:** Put-heavy amplifiers near ATM = flip-prone (primary CEX flip candidates). Call-heavy = stable. Large MM position = durable state. Small = fragile, discount.
+
+**Flip Diagnosis:** No position change = mechanical (trust it). Position unwinding = strike losing relevance. New positioning = wait to stabilize.
+
 ### 6. Synthesize Call
 
 **Bull:** -CEX above spot stronger than +CEX above. Net -GEX. VWAP above. CEX path clear. Spot above hedge line.
 **Bear:** +CEX above dominant. Net -GEX with downward momentum. VWAP below. Spot at/below hedge line. Short put squeeze fuel below.
 **Neutral:** Sandwiched between +CEX above and -CEX below. Net +GEX. VWAP near spot. Path blocked both ways.
+
+**Close Estimate (with 1-2h data):** If dominant amplifier has reinforcing CEX, estimate close near that strike using amplifier-pin ratio. If conflicting, close more likely at the nearest wall with reinforcing CEX.
 
 ### 7. Target + Stop
 **Target:** Bull = spot to nearest +CEX ceiling / -GEX amplifier above. Bear = spot to nearest -CEX floor / +GEX wall below. Width reflects regime. Validate vs EM.
@@ -112,9 +123,17 @@ Gap = VWAP - spot. Positive = upside bias. Negative = downside bias. -CEX near V
 
 ### 8. Confidence (1-5)
 +1 each: GEX regime aligned, CEX dominant aligned, VWAP aligned, GEX+CEX confluence, time-of-day supports primary signal.
-Adjustments: -1 beyond EM, -1 CEX barrier > magnet, -1 single snapshot, +1 DEX+VEX confirm, +1 positioning confirms, -1 VEX conflicts + VIX >3pt range, -1 positioning conflicts.
+Adjustments: -1 beyond EM, -1 CEX barrier > magnet, -1 single snapshot, +1 DEX+VEX confirm, +1 positioning confirms, -1 VEX conflicts + VIX >3pt range, -1 positioning conflicts, +1 gamma-charm reinforcing at dominant strike (1-2h window), -1 gamma-charm conflicting at target strike.
 
-### 9. Multi-Update Protocol
+### 9. BWB Wall Scan
+After completing steps 1-8, scan for BWB-qualifying walls. Read `BWB.md` for full rules. Quick check:
+- Any +GEX wall in top 2 within ±60 pts of spot?
+- Distance 20-60 pts from spot?
+- No amplifier (-GEX > 50% of wall) blocking the path?
+- CEX not hostile at wall strike?
+If YES to all → read `BWB.md`, generate BWB suggestion block, append to output. If no walls qualify, skip silently (no "no BWBs found" message). On updates: re-check wall health — flag if wall decayed >50% from entry.
+
+### 10. Multi-Update Protocol
 **Hold:** isolated CEX shift, wall <25% decay, price above stop, thesis intact.
 **Revise:** CEX flip persists 2+ reads, spreads to adjacent strikes, wall 50%+ decay, stop hit.
 **Reversal requires 2+ of:** persistent CEX flip, adjacent strike spread, broader structure shift, price confirmation.
@@ -143,6 +162,11 @@ EM Range:     [XXXX] – [XXXX] (if provided)
 ─── SIGNAL BREAKDOWN ──────────────────────
 GEX Regime / CEX Dominant / CEX Path / DEX Tilt / VEX Signal / VWAP / Confluence / Time Weight
 
+─── GAMMA-CHARM COUPLING (if <2h remain) ──
+[Strike]: GEX [value] + CEX [value] = [reinforcing/conflicting] [support/resistance]
+  Source: [put-heavy/call-heavy/mixed] | Stability: [durable/fragile] | Flip risk: [high/low]
+Amplifier-Pin Ratio: [amp strike] at [Xx] vs [wall strike] → est. close [XXXX]
+
 ─── POSITIONING ───────────────────────────
 Hedge Line / Profile / Call-Put Skew / Squeeze Risk / Upside Aspiration
 
@@ -158,13 +182,24 @@ Hedge Line / Profile / Call-Put Skew / Squeeze Risk / Upside Aspiration
 ─── ADJUSTED WEIGHTS (if 5+ predictions) ──
 [Signal: base → adjusted (hit rate%)]
 
+─── BWB SUGGESTIONS (if walls qualify) ────
+[See BWB.md output format — appended automatically when walls pass qualification]
+
 Prediction ID: [short-id]
 ═══════════════════════════════════════════
 ```
 
----
+## Prediction Recording
 
-## Feedback
+### During Session (immediate)
+After each directional call, **immediately append** the prediction to `predictions.json` with `"score": null`. This preserves predictions across context compaction/clearing. Fields: id, date, time, spot, vwap, call, confidence, target_low, target_high, stop, close (null), score (null), notes (brief thesis), signals.
+
+### End of Day (`/feedback` or retrospective)
+1. User provides closing price
+2. Score all `"score": null` predictions against the close
+3. Write retrospective to retrospectives.md
+4. Run weight adjustment
+
 `/feedback [id] +1|0|-1` → update predictions.json, print running accuracy + signal hit rates.
 
 ## Weight Adjustment
