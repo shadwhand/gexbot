@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "signal_weights": {
+    "gex_regime": { "base": 0.25, "adjusted": 0.25, "hit_rate": null, "sample_count": 0 },
+    "cex_dominant": { "base": 0.30, "adjusted": 0.30, "hit_rate": null, "sample_count": 0 },
+    "vwap_aligned": { "base": 0.20, "adjusted": 0.20, "hit_rate": null, "sample_count": 0 },
+    "confluence": { "base": 0.15, "adjusted": 0.15, "hit_rate": null, "sample_count": 0 },
+    "time_of_day": { "base": 0.10, "adjusted": 0.10, "hit_rate": null, "sample_count": 0 }
+  },
+  "predictions": []
+}

@@ -1,0 +1,9 @@
+node_modules/
+scripts/.env
+.chrome-scraper-profile/
+latest_data.json
+.DS_Store
+*.backup.md
+analyze.md
+predictions.json
+.claude/

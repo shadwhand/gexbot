@@ -1,0 +1,13 @@
+{
+  "name": "spx-gex-analyzer",
+  "version": "1.0.0",
+  "description": "SPX GEX/CEX directional indicator — automated data fetching via system Chrome",
+  "scripts": {
+    "fetch": "node scripts/fetch_data.js",
+    "reset-cookies": "rm -f scripts/.session_cookies.json && echo 'Cookies cleared'"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "puppeteer": "^23.0.0"
+  }
+}
