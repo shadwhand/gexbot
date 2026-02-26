@@ -27,7 +27,7 @@ Auto-fetches data during market hours. Full skill integration.
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/gexbot.git
+git clone https://github.com/shadwhand/gexbot.git
 cd gexbot
 npm install
 ```
