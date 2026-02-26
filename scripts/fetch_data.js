@@ -36,6 +36,39 @@ const EXTRACT_VISIBLE_ROWS = (strikeFloor, colIdx) => `
   })()
 `;
 
+// Extract ALL columns for each row (strike + every expiry column)
+const EXTRACT_ALL_COLUMNS = (strikeFloor) => `
+  (() => {
+    const rows = Array.from(document.querySelectorAll('tr[data-index]'));
+    return rows.map(row => {
+      const cells = row.querySelectorAll('td');
+      const strike = cells[0]?.textContent.trim();
+      const values = {};
+      for (let i = 1; i < cells.length; i++) {
+        const val = cells[i]?.querySelector('div')?.textContent.trim()
+                  || cells[i]?.textContent.trim();
+        if (val) values[i] = val;
+      }
+      return { strike: parseInt(strike), values };
+    }).filter(r => r.strike && r.strike >= ${strikeFloor});
+  })()
+`;
+
+// Read table column headers (expiry dates / labels)
+const EXTRACT_HEADERS = () => `
+  (() => {
+    const headerRow = document.querySelector('thead tr') || document.querySelector('tr');
+    if (!headerRow) return {};
+    const cells = headerRow.querySelectorAll('th, td');
+    const headers = {};
+    for (let i = 1; i < cells.length; i++) {
+      const text = cells[i]?.textContent.trim();
+      if (text) headers[i] = text;
+    }
+    return headers;
+  })()
+`;
+
 async function ensureLoggedIn(page) {
   console.log('Step 1: Opening optionsdepth...');
   await goto(page, CONFIG.loginUrl, CONFIG.timeout);
@@ -251,33 +284,7 @@ async function setPositionType(page, type = 'ALL') {
   console.log('done');
 }
 
-async function extractTable(page, label) {
-  await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
-
-  // Find the scrollable table container
-  const containerSel = await page.evaluate(() => {
-    // Look for the scrollable parent of the table rows
-    let el = document.querySelector('tr[data-index]');
-    while (el) {
-      el = el.parentElement;
-      if (el && (el.scrollHeight > el.clientHeight + 10) && el.clientHeight > 100) {
-        return true;
-      }
-    }
-    return false;
-  });
-
-  // Scroll through the table and accumulate all rows
-  const allRows = new Map();
-
-  const collectVisible = async () => {
-    const rows = await page.evaluate(EXTRACT_VISIBLE_ROWS(CONFIG.strikeFloor, CONFIG.columnIndex));
-    for (const row of rows) {
-      allRows.set(row.strike, row);
-    }
-  };
-
-  // Scroll to top first
+async function scrollToTop(page) {
   await page.evaluate(() => {
     let el = document.querySelector('tr[data-index]');
     while (el) {
@@ -289,36 +296,81 @@ async function extractTable(page, label) {
     }
   });
   await wait(300);
+}
+
+async function scrollDown(page) {
+  await page.evaluate(() => {
+    let el = document.querySelector('tr[data-index]');
+    while (el) {
+      el = el.parentElement;
+      if (el && el.scrollHeight > el.clientHeight + 10 && el.clientHeight > 100) {
+        el.scrollTop += el.clientHeight * 0.8;
+        return;
+      }
+    }
+  });
+  await wait(200);
+}
+
+async function extractTable(page, label) {
+  await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
+
+  const allRows = new Map();
+  const collectVisible = async () => {
+    const rows = await page.evaluate(EXTRACT_VISIBLE_ROWS(CONFIG.strikeFloor, CONFIG.columnIndex));
+    for (const row of rows) allRows.set(row.strike, row);
+  };
+
+  await scrollToTop(page);
   await collectVisible();
 
-  // Scroll down incrementally
   let prevSize = 0;
   let staleCount = 0;
   while (staleCount < 3) {
-    await page.evaluate(() => {
-      let el = document.querySelector('tr[data-index]');
-      while (el) {
-        el = el.parentElement;
-        if (el && el.scrollHeight > el.clientHeight + 10 && el.clientHeight > 100) {
-          el.scrollTop += el.clientHeight * 0.8;
-          return;
-        }
-      }
-    });
-    await wait(200);
+    await scrollDown(page);
     await collectVisible();
-
-    if (allRows.size === prevSize) {
-      staleCount++;
-    } else {
-      staleCount = 0;
-    }
+    if (allRows.size === prevSize) staleCount++;
+    else staleCount = 0;
     prevSize = allRows.size;
   }
 
   const rows = Array.from(allRows.values()).sort((a, b) => b.strike - a.strike);
   console.log('  Extracted ' + rows.length + ' rows');
   return { label, rows };
+}
+
+/**
+ * Extract ALL columns for a metric in one scroll pass.
+ * Returns { label, headers: { colIdx: "headerText" }, rows: [{ strike, values: { colIdx: val } }] }
+ */
+async function extractTableAllColumns(page, label) {
+  await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
+
+  // Read column headers
+  const headers = await page.evaluate(EXTRACT_HEADERS());
+
+  const allRows = new Map();
+  const collectVisible = async () => {
+    const rows = await page.evaluate(EXTRACT_ALL_COLUMNS(CONFIG.strikeFloor));
+    for (const row of rows) allRows.set(row.strike, row);
+  };
+
+  await scrollToTop(page);
+  await collectVisible();
+
+  let prevSize = 0;
+  let staleCount = 0;
+  while (staleCount < 3) {
+    await scrollDown(page);
+    await collectVisible();
+    if (allRows.size === prevSize) staleCount++;
+    else staleCount = 0;
+    prevSize = allRows.size;
+  }
+
+  const rows = Array.from(allRows.values()).sort((a, b) => b.strike - a.strike);
+  console.log('  Extracted ' + rows.length + ' rows × ' + Object.keys(headers).length + ' columns');
+  return { label, headers, rows };
 }
 
 async function getSpotPrice(page) {
@@ -339,8 +391,10 @@ async function getSpotPrice(page) {
 /**
  * Extract all optionsdepth data using an existing page.
  * Used by scheduler to avoid re-launching browser.
+ * @param {object} page - Puppeteer page
+ * @param {object} opts - { allColumns: bool } — if true, extract all expiry columns per metric
  */
-async function extractAllData(page) {
+async function extractAllData(page, opts = {}) {
   // Navigate to depth view if not already there
   if (!page.url().includes('depth-view')) {
     await goto(page, CONFIG.url, CONFIG.timeout);
@@ -354,39 +408,59 @@ async function extractAllData(page) {
   const spot = await getSpotPrice(page);
   console.log('  Spot: ' + (spot || 'not detected'));
 
+  const extractFn = opts.allColumns ? extractTableAllColumns : extractTable;
   const data = {};
 
   await switchToMetric(page, 'GEX');
-  data.gex = await extractTable(page, 'GEX');
+  data.gex = await extractFn(page, 'GEX');
 
   await switchToMetric(page, 'CEX');
-  data.cex = await extractTable(page, 'CEX');
+  data.cex = await extractFn(page, 'CEX');
 
   await switchToMetric(page, 'DEX');
-  data.dex = await extractTable(page, 'DEX');
+  data.dex = await extractFn(page, 'DEX');
 
   await switchToMetric(page, 'VEX');
-  data.vex = await extractTable(page, 'VEX');
+  data.vex = await extractFn(page, 'VEX');
 
   // Position: extract net and puts, derive calls = net - puts
   await switchToMetric(page, 'POSITION');
   await setPositionType(page, 'ALL');
-  data.position = await extractTable(page, 'NET_POSITION');
+  data.position = await extractFn(page, 'NET_POSITION');
 
   await setPositionType(page, 'P');
-  data.position_puts = await extractTable(page, 'POSITION_PUTS');
+  data.position_puts = await extractFn(page, 'POSITION_PUTS');
 
-  // Derive calls = net - puts
-  data.position_calls = {
-    label: 'POSITION_CALLS',
-    rows: data.position.rows.map(net => {
-      const putRow = data.position_puts.rows.find(p => p.strike === net.strike);
-      const netVal = parseFloat(net.value) || 0;
-      const putVal = putRow ? (parseFloat(putRow.value) || 0) : 0;
-      return { strike: net.strike, value: String(netVal - putVal) };
-    }),
-  };
-  console.log('  Derived ' + data.position_calls.rows.length + ' call position rows');
+  // Derive calls = net - puts (use single-column for scheduler, multi-column for all-columns mode)
+  if (opts.allColumns) {
+    // Derive per-column: for each column index, calls = net - puts
+    const headers = data.position.headers || {};
+    data.position_calls = {
+      label: 'POSITION_CALLS',
+      headers,
+      rows: data.position.rows.map(net => {
+        const putRow = data.position_puts.rows.find(p => p.strike === net.strike);
+        const derived = {};
+        for (const colIdx of Object.keys(net.values || {})) {
+          const netVal = parseFloat(net.values[colIdx]) || 0;
+          const putVal = putRow?.values?.[colIdx] ? (parseFloat(putRow.values[colIdx]) || 0) : 0;
+          derived[colIdx] = String(netVal - putVal);
+        }
+        return { strike: net.strike, values: derived };
+      }),
+    };
+  } else {
+    data.position_calls = {
+      label: 'POSITION_CALLS',
+      rows: data.position.rows.map(net => {
+        const putRow = data.position_puts.rows.find(p => p.strike === net.strike);
+        const netVal = parseFloat(net.value) || 0;
+        const putVal = putRow ? (parseFloat(putRow.value) || 0) : 0;
+        return { strike: net.strike, value: String(netVal - putVal) };
+      }),
+    };
+  }
+  console.log('  Derived ' + (data.position_calls.rows?.length || 0) + ' call position rows');
 
   // Reset filter back to ALL for clean state
   await setPositionType(page, 'ALL');
@@ -397,11 +471,101 @@ async function extractAllData(page) {
 // Export for scheduler
 module.exports = { ensureLoggedIn, extractAllData, CONFIG };
 
+// Print helpers for standalone output
+function printSingleColumn(data) {
+  const metrics = [
+    ['GEX', 'gex'], ['CEX ($M/5min)', 'cex'], ['DEX', 'dex'],
+    ['VEX ($M/1% IV)', 'vex'], ['Net Position (All)', 'position'],
+    ['Position (Calls)', 'position_calls'], ['Position (Puts)', 'position_puts'],
+  ];
+  for (const [title, key] of metrics) {
+    if (!data[key]) continue;
+    console.log('\n' + title + ':\nStrike\t' + title.split(' ')[0]);
+    data[key].rows.forEach(r => console.log(r.strike + '\t' + r.value));
+  }
+}
+
+/**
+ * Collapse multi-column data into aggregate (sum all expiries) per strike.
+ * Returns a new data object with single-column rows (like the standard format)
+ * plus an `aggregate` key with the summed values.
+ */
+function aggregateData(data, odteColIdx) {
+  const result = {};
+  const metricKeys = ['gex', 'cex', 'dex', 'vex', 'position', 'position_calls', 'position_puts'];
+
+  for (const key of metricKeys) {
+    if (!data[key] || !data[key].rows) continue;
+    const headers = data[key].headers || {};
+    const colIndices = Object.keys(headers).sort((a, b) => parseInt(a) - parseInt(b));
+
+    // 0DTE column: the specific expiry for tomorrow
+    const odteRows = data[key].rows.map(r => ({
+      strike: r.strike,
+      value: r.values?.[odteColIdx] || '0',
+    })).filter(r => parseFloat(r.value) !== 0 || key === 'position' || key === 'position_calls' || key === 'position_puts');
+
+    // Aggregate: sum all columns
+    const aggRows = data[key].rows.map(r => {
+      let sum = 0;
+      for (const ci of colIndices) {
+        sum += parseFloat(r.values?.[ci] || '0') || 0;
+      }
+      return { strike: r.strike, value: String(Math.round(sum * 100) / 100) };
+    });
+
+    result[key] = { label: data[key].label, rows: odteRows };
+    result[key + '_agg'] = { label: data[key].label + '_AGG', rows: aggRows };
+  }
+
+  // Include headers info for reference
+  result._headers = data.gex?.headers || {};
+  result._odteCol = odteColIdx;
+  result._expiries = Object.values(data.gex?.headers || {});
+
+  return result;
+}
+
+function printAggregate(aggData, odteLabel) {
+  const metrics = [
+    ['GEX', 'gex'], ['CEX', 'cex'], ['DEX', 'dex'],
+    ['VEX', 'vex'], ['Net Position', 'position'],
+    ['Position (Calls)', 'position_calls'], ['Position (Puts)', 'position_puts'],
+  ];
+
+  console.log('\nExpiries included: ' + (aggData._expiries || []).join(', '));
+
+  for (const [title, key] of metrics) {
+    const odte = aggData[key];
+    const agg = aggData[key + '_agg'];
+    if (!odte || !agg) continue;
+    console.log('\n' + title + ':');
+    console.log('Strike\t0DTE(' + odteLabel + ')\tAggregate');
+    // Merge by strike
+    const strikes = new Set([...odte.rows.map(r => r.strike), ...agg.rows.map(r => r.strike)]);
+    const odteMap = Object.fromEntries(odte.rows.map(r => [r.strike, r.value]));
+    const aggMap = Object.fromEntries(agg.rows.map(r => [r.strike, r.value]));
+    for (const s of [...strikes].sort((a, b) => b - a)) {
+      const o = odteMap[s] || '0';
+      const a = aggMap[s] || '0';
+      if (parseFloat(o) === 0 && parseFloat(a) === 0) continue;
+      console.log(s + '\t' + o + '\t' + a);
+    }
+  }
+}
+
 // Standalone execution
+// Usage: node fetch_data.js [--aggregate]
+//   default:     pulls single 0DTE column (COLUMN_INDEX env var, default 1)
+//   --aggregate: pulls all columns, outputs 0DTE + summed aggregate side by side
 if (require.main === module) {
+  const aggregate = process.argv.includes('--aggregate');
+
   (async () => {
     console.log('\n SPX Options Depth Scraper');
-    console.log(' ' + '-'.repeat(40) + '\n');
+    console.log(' ' + '-'.repeat(40));
+    if (aggregate) console.log(' Mode: aggregate (0DTE + all expiries summed)');
+    console.log('');
 
     if (CONFIG.chromePath) console.log('Chrome:  ' + CONFIG.chromePath);
     console.log('Profile: ' + CONFIG.chromeProfilePath + '\n');
@@ -414,41 +578,68 @@ if (require.main === module) {
       await ensureLoggedIn(page);
 
       console.log('\nStep 3: Navigating to depth view...');
-      const { spot, data } = await extractAllData(page);
+      const { spot, data } = await extractAllData(page, { allColumns: aggregate });
 
       const timestamp = new Date().toISOString();
-      const results = {
-        timestamp,
-        date: timestamp.split('T')[0],
-        time_et: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }),
-        spot,
-        vwap: null,
-        data,
-      };
 
-      fs.writeFileSync(CONFIG.outputPath, JSON.stringify(results, null, 2));
+      if (aggregate) {
+        // Find tomorrow's column index from headers
+        const headers = data.gex?.headers || {};
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
+        let odteColIdx = String(CONFIG.columnIndex);
+        let odteLabel = headers[odteColIdx] || 'col' + odteColIdx;
+        // Try to auto-detect tomorrow's column
+        for (const [idx, hdr] of Object.entries(headers)) {
+          if (hdr.startsWith(tomorrowStr)) {
+            odteColIdx = idx;
+            odteLabel = hdr;
+            break;
+          }
+        }
+        const aggData = aggregateData(data, odteColIdx);
 
-      console.log('\n' + '='.repeat(50));
-      console.log('DATA READY');
-      console.log('='.repeat(50));
-      console.log('Time (ET): ' + results.time_et);
-      console.log('Spot:      ' + (spot || 'add manually'));
-      console.log('VWAP:      add manually\n');
+        const results = {
+          timestamp: new Date().toISOString(),
+          date: new Date().toISOString().split('T')[0],
+          time_et: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }),
+          spot,
+          vwap: null,
+          data: aggData,
+        };
 
-      console.log('GEX:\nStrike\tGEX');
-      data.gex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-      console.log('\nCEX ($M/5min):\nStrike\tCEX');
-      data.cex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-      console.log('\nDEX:\nStrike\tDEX');
-      data.dex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-      console.log('\nVEX ($M/1% IV):\nStrike\tVEX');
-      data.vex.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-      console.log('\nNet Position (All):\nStrike\tPosition');
-      data.position.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-      console.log('\nPosition (Calls):\nStrike\tPosition');
-      data.position_calls.rows.forEach(r => console.log(r.strike + '\t' + r.value));
-      console.log('\nPosition (Puts):\nStrike\tPosition');
-      data.position_puts.rows.forEach(r => console.log(r.strike + '\t' + r.value));
+        fs.writeFileSync(CONFIG.outputPath, JSON.stringify(results, null, 2));
+
+        console.log('\n' + '='.repeat(50));
+        console.log('DATA READY (aggregate)');
+        console.log('='.repeat(50));
+        console.log('Time (ET): ' + results.time_et);
+        console.log('Spot:      ' + (spot || 'add manually'));
+        console.log('VWAP:      add manually');
+
+        printAggregate(aggData, odteLabel);
+      } else {
+        const results = {
+          timestamp: new Date().toISOString(),
+          date: new Date().toISOString().split('T')[0],
+          time_et: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }),
+          spot,
+          vwap: null,
+          data,
+        };
+
+        fs.writeFileSync(CONFIG.outputPath, JSON.stringify(results, null, 2));
+
+        console.log('\n' + '='.repeat(50));
+        console.log('DATA READY');
+        console.log('='.repeat(50));
+        console.log('Time (ET): ' + results.time_et);
+        console.log('Spot:      ' + (spot || 'add manually'));
+        console.log('VWAP:      add manually');
+
+        printSingleColumn(data);
+      }
       console.log('\nDone.\n');
 
     } catch (err) {
