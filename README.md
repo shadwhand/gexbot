@@ -7,7 +7,7 @@ Built as a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/sk
 ## What It Does
 
 - Scrapes live GEX/CEX/DEX/VEX/Positioning data from optionsdepth.com via Puppeteer
-- Claude analyzes the data using a 9-step framework (regime detection, key levels, flow analysis, synthesis)
+- Claude analyzes the data using a 10-step framework (regime detection, key levels, flow analysis, gamma-charm coupling, synthesis)
 - Outputs a structured directional call with targets, stops, and confidence rating
 - Tracks prediction accuracy and adjusts signal weights over time
 
@@ -112,17 +112,19 @@ The scraper uses a dedicated Chrome profile to avoid conflicts with your main br
 ## File Structure
 
 ```
-├── SKILL.md                 # Core analytical framework (Claude reads this)
+├── SKILL.md                 # Core analytical framework (loaded every invocation)
+├── BWB.md                   # Broken-wing butterfly strategy (loaded on demand)
 ├── scripts/
 │   ├── fetch_data.js        # Puppeteer scraper for optionsdepth.com
 │   └── .env.example         # Config template
 ├── reference/
-│   ├── concepts.md          # Detailed signal theory (GEX, CEX, VEX, etc.)
+│   ├── concepts.md          # Detailed signal theory (loaded on demand)
 │   ├── examples.md          # Annotated session examples
-│   └── lessons.md           # Pattern-based lessons from live trading
+│   ├── lessons.md           # Confirmed patterns from live trading
+│   └── retrospectives_archive.md  # Older session history
 ├── data/
 │   ├── predictions.json     # Prediction tracking + signal weight calibration
-│   ├── retrospectives.md    # Session retrospectives
+│   ├── retrospectives.md    # Recent session summaries
 │   ├── strategies.md        # Trade structure reference
 │   └── meic.md              # MEIC iron condor strategy rules
 ```
@@ -136,6 +138,18 @@ After each analysis, Claude logs predictions to `data/predictions.json`. Score t
 ```
 
 After 5+ scored predictions, signal weights auto-adjust based on hit rates. The system learns which signals are most predictive for current market conditions.
+
+## Keeping the Skill Compact
+
+`SKILL.md` is loaded into context every invocation. Reference and data files are loaded on demand. As you use the skill and accumulate learnings, files grow — and that costs tokens.
+
+- **SKILL.md** — rules, tables, short-form. Prose explanations belong in `concepts.md`.
+- **retrospectives.md** — grows fastest. After extracting lessons to `lessons.md` and examples to `examples.md`, compress each session to a 2-3 line summary. Archive sessions older than 5 trading days.
+- **lessons.md** — tag entries promoted to SKILL.md so you don't re-derive them.
+- **concepts.md** — should add detail SKILL.md doesn't have, not restate it.
+- **predictions.json** — keep only the last 20 entries. Adjusted weights carry forward.
+
+Target: SKILL.md under ~200 lines. Everything else loaded only when needed.
 
 ## License
 
