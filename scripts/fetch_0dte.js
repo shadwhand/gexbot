@@ -37,6 +37,14 @@ async function readTooltip(page) {
   });
 }
 
+async function readTooltipAt(page, canvasInfo, pct) {
+  const x = canvasInfo.x + canvasInfo.width * pct;
+  const y = canvasInfo.y + canvasInfo.height * 0.5;
+  await page.mouse.move(x, y);
+  await wait(500);
+  return readTooltip(page);
+}
+
 async function fetch0dte(existingPage, date) {
   let browser = null;
   let page = existingPage;
@@ -54,23 +62,23 @@ async function fetch0dte(existingPage, date) {
     await goto(page, url, TIMEOUT);
     await wait(8000); // SvelteKit render + chart data load
 
-    // Scroll the browser window fully to the right so latest data is visible
-    // Use End key and arrow keys to ensure the page scrolls horizontally
-    await page.keyboard.press('End');
-    await wait(500);
-    // Scroll right repeatedly with arrow keys
-    for (let i = 0; i < 20; i++) {
-      await page.keyboard.press('ArrowRight');
-    }
-    await wait(500);
-    // Also try JS scroll as backup
-    await page.evaluate(() => {
-      window.scrollTo(document.documentElement.scrollWidth, window.scrollY);
+    // Set interval to 30 seconds — fewer data points means the chart fills
+    // more of the canvas, so the latest data is closer to the right edge.
+    // Radio button: name="intervals", value="30"
+    const intervalSet = await page.evaluate(() => {
+      const radios = document.querySelectorAll('input[type="radio"][name="intervals"]');
+      for (const r of radios) {
+        if (r.value === '30') { r.click(); return true; }
+      }
+      return false;
     });
-    await wait(2000); // let scroll settle and chart re-render
+    if (intervalSet) {
+      console.log('  Set interval to 30s');
+      await wait(3000); // chart re-renders with new interval
+    }
 
     // Find the main chart canvas (widest one)
-    const canvasInfo = await page.evaluate(() => {
+    const ci = await page.evaluate(() => {
       const all = Array.from(document.querySelectorAll('canvas'));
       let best = null;
       let bestWidth = 0;
@@ -84,52 +92,85 @@ async function fetch0dte(existingPage, date) {
       return best;
     });
 
-    if (!canvasInfo) {
+    if (!ci) {
       console.log('  No chart canvas found');
       return { data: { spx: null, em: null, vix: null }, browser, page };
     }
 
-    // Sweep from right edge inward to find the latest data point.
-    // Historical dates fill the chart; live data stops near the middle.
-    // Use fine-grained sweep near the right edge for most recent data.
-    const y = canvasInfo.y + canvasInfo.height * 0.5;
+    // Chart uses wheel for zoom, not pan. Don't try to scroll.
+    // Instead, binary search for the rightmost data point on the canvas.
+    // During live trading, data stops at the current time (e.g., 2 PM = ~69%).
+    // On historical dates, data fills to ~98%.
+    const y = ci.y + ci.height * 0.5;
     let data = { spx: null, em: null, vix: null };
     let bestData = null;
     let bestPct = 0;
 
-    // First pass: find rightmost data point with fine granularity
-    for (const pct of [0.99, 0.98, 0.97, 0.96, 0.95, 0.93, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50, 0.40]) {
-      const x = canvasInfo.x + canvasInfo.width * pct;
+    // Phase 1: Coarse sweep from right to find the rightmost region with data.
+    // During live trading, data ends at ~current_time/market_hours (e.g., 69% at 2 PM).
+    // On historical dates, data fills to ~99%.
+    console.log('  Searching for latest data point...');
+    for (const pct of [0.995, 0.98, 0.95, 0.90, 0.85, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30]) {
+      const x = ci.x + ci.width * pct;
       await page.mouse.move(x, y);
-      await wait(600);
+      await wait(500);
       data = await readTooltip(page);
       if (data.spx) {
-        if (!bestData) {
-          bestData = { ...data };
-          bestPct = pct;
-          console.log('  Found data at ' + Math.round(pct * 100) + '% (' + Math.round(x) + ', ' + Math.round(y) + ')');
-        }
+        bestData = { ...data };
+        bestPct = pct;
+        console.log('  Coarse hit at ' + (pct * 100).toFixed(1) + '% — SPX=' + data.spx);
         break;
       }
     }
 
-    // If found, do a fine sweep rightward from that point to get the absolute latest
-    if (bestData && bestPct < 0.99) {
-      for (const offset of [0.01, 0.005, 0.002]) {
-        const finePct = bestPct + offset;
-        if (finePct > 1.0) continue;
-        const x = canvasInfo.x + canvasInfo.width * finePct;
+    if (!bestData) {
+      console.log('  No data found on chart');
+      return { data: { spx: null, em: null, vix: null }, browser, page };
+    }
+
+    // Phase 2: Walk rightward from the coarse hit in small steps to find the edge.
+    // Each step = 0.5% of canvas width (~6-7 pixels). Track the last known data point.
+    let lo = bestPct;
+    let hi = 0.999;
+    let hitEdge = false;
+
+    for (let p = bestPct + 0.005; p <= 0.999; p += 0.005) {
+      const x = ci.x + ci.width * p;
+      await page.mouse.move(x, y);
+      await wait(300);
+      const d = await readTooltip(page);
+      if (d.spx) {
+        lo = p;
+        bestData = { ...d };
+        bestPct = p;
+      } else {
+        hi = p;
+        hitEdge = true;
+        break;
+      }
+    }
+
+    // Phase 3: If we found the edge (data→no data boundary), binary search for precision.
+    // Each iteration halves the gap — 8 iterations = ~0.002% resolution (~0.03 pixels).
+    if (hitEdge) {
+      for (let i = 0; i < 8; i++) {
+        const mid = (lo + hi) / 2;
+        const x = ci.x + ci.width * mid;
         await page.mouse.move(x, y);
-        await wait(400);
-        const fineData = await readTooltip(page);
-        if (fineData.spx && fineData.spx !== bestData.spx) {
-          bestData = { ...fineData };
-          console.log('  Refined to ' + Math.round(finePct * 100) + '% — SPX=' + fineData.spx);
+        await wait(250);
+        const d = await readTooltip(page);
+        if (d.spx) {
+          lo = mid;
+          bestData = { ...d };
+          bestPct = mid;
+        } else {
+          hi = mid;
         }
       }
     }
 
-    data = bestData || data;
+    console.log('  Latest data at ' + (bestPct * 100).toFixed(1) + '% — SPX=' + bestData.spx);
+    data = bestData;
 
     console.log('  SPX=' + (data.spx || '?') + ' EM=' + (data.em || '?') + ' VIX=' + (data.vix || '?'));
     return { data, browser, page };
