@@ -10,7 +10,7 @@ description: Use when analyzing SPX with auto-fetching from optionsdepth.com. Ge
 - **retrospectives.md:** `data/retrospectives.md` in this skill
 - **strategies.md:** `data/strategies.md` in this skill
 - **meic.md:** `data/meic.md` in this skill
-- **BWB strategy:** `BWB.md` in this skill — read when walls qualify or user requests `/bwb`
+- **Strategy detail files:** `data/` dir — `meic.md`, `mmmm_ride_or_die.md`, `breakeven_ic.md`, `0dte_iron_fly.md`, `joif.md`, `maria_shoe.md`, `schwartz_ic.md` — read on-demand when evaluating specific strategies
 - **Reference docs:** `reference/` dir in this skill (concepts, examples, lessons) — read on-demand
 
 ## Auto-Fetch
@@ -125,13 +125,26 @@ GEX and CEX derive from the same OI. Their per-strike alignment in the 1-2h wind
 +1 each: GEX regime aligned, CEX dominant aligned, VWAP aligned, GEX+CEX confluence, time-of-day supports primary signal.
 Adjustments: -1 beyond EM, -1 CEX barrier > magnet, -1 single snapshot, +1 DEX+VEX confirm, +1 positioning confirms, -1 VEX conflicts + VIX >3pt range, -1 positioning conflicts, +1 gamma-charm reinforcing at dominant strike (1-2h window), -1 gamma-charm conflicting at target strike.
 
-### 9. BWB Wall Scan
-After completing steps 1-8, scan for BWB-qualifying walls. Read `BWB.md` for full rules. Quick check:
-- Any +GEX wall in top 2 within ±60 pts of spot?
-- Distance 20-60 pts from spot?
-- No amplifier (-GEX > 50% of wall) blocking the path?
-- CEX not hostile at wall strike?
-If YES to all → read `BWB.md`, generate BWB suggestion block, append to output. If no walls qualify, skip silently (no "no BWBs found" message). On updates: re-check wall health — flag if wall decayed >50% from entry.
+### 9. Opening IC Scan
+After completing steps 1-8, scan for opening IC opportunities that exploit elevated opening volatility. Quick check:
+- **Regime:** Net +GEX (range-bound) preferred. Mixed (±5K) acceptable. Net -GEX → flag as elevated risk.
+- **Put short strike:** Find the strongest +GEX wall 20-60 pts below spot. Require: +GEX wall, no -GEX amplifier blocking path from spot, CEX not hostile. Prefer +DEX confirmation.
+- **Call short strike:** Find the strongest +GEX wall 20-60 pts above spot. Same checks.
+- **Wing width:** 50-60 pts (MEIC-style) or match to target credit.
+- **Amplifier gauntlet:** If continuous -GEX amplifiers connect spot to a short strike with no intervening wall, skip that side.
+
+If qualifying walls exist on BOTH sides → generate IC suggestion block, append to output. If only one side qualifies → note the safe side (potential vertical credit spread). If neither qualifies → skip silently.
+
+**Output when walls qualify:**
+```
+─── OPENING IC (walls qualify) ────────────
+Put:  Short [strike]P ([GEX], [CEX]) | Long [strike]P ([wing]pt wing)
+Call: Short [strike]C ([GEX], [CEX]) | Long [strike]C ([wing]pt wing)
+Regime: [positive/mixed/negative] | Distance: [X]pts put, [X]pts call
+Risk: [wall health, amplifier proximity, regime flag]
+```
+
+On updates: re-check wall health — flag if wall decayed >50% from pre-session read.
 
 ### 10. Multi-Update Protocol
 **Hold:** isolated CEX shift, wall <25% decay, price above stop, thesis intact.
@@ -182,8 +195,8 @@ Hedge Line / Profile / Call-Put Skew / Squeeze Risk / Upside Aspiration
 ─── ADJUSTED WEIGHTS (if 5+ predictions) ──
 [Signal: base → adjusted (hit rate%)]
 
-─── BWB SUGGESTIONS (if walls qualify) ────
-[See BWB.md output format — appended automatically when walls pass qualification]
+─── OPENING IC (if walls qualify) ─────────
+[Put/Call short strikes, wings, regime, distance, risk — appended when walls pass scan]
 
 Prediction ID: [short-id]
 ═══════════════════════════════════════════
