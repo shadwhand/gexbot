@@ -29,11 +29,12 @@ GEX-specific entry/exit only. Assumes knowledge of standard options structures.
 | Name | Structure | Entry | Key Rules | Edge |
 |------|-----------|-------|-----------|------|
 | **MEIC** (Tammy Chambless) | IC, 50-60pt wings | 6 entries/day, 30min apart, start 12PM ET | Credit $1-1.75/side. Stop = full IC credit/side. MEIC+ variant. ~20.7% CAGR. | See `meic.md` for full rules + GEX integration. |
-| **Breakeven IC** (John Sandvand) | IC, 5-15 delta | 30min spacing, all session | Credit ~$200. Stop = total premium/side. | 39% win rate but 2.4x win/loss ratio. 70-80% annual. |
-| **0DTE Iron Fly** (Severson/Perryman) | ATM iron fly at open | Open, center at spot, 20-50pt wings | Target $1.50/contract. Exit by 11AM. Avg hold 18min. | Opening vol crush + theta. |
-| **JOIF** (Jim Olson) | ATM iron fly at open | Open, dynamic wings | IM <$30 → $50 wings. IM >$30 → expand $10/$10. Target $1.50. Exit by 11AM. | Wing sizing adapts to vol. |
-| **Maria Shoe** | Iron fly at open | Open | Daily target $300. Hit target → stop trading. | Discipline over optimization. |
-| **Schwartz IC** (CBOE) | IC, 10pt wide, $1/side | Post-vol-spike entry | Set-and-forget. Close at $0.10 bid ("10-cent rule"). | Simple. Favorable after vol expansion. |
+| **Breakeven IC** (John Sandvand) | IC, 5-15 delta | 30min spacing, all session | Credit ~$200. Stop = total premium/side. | 39% win rate, 2.4x W/L ratio. See `breakeven_ic.md`. |
+| **0DTE Iron Fly** (Severson/Perryman) | ATM iron fly at open | Open, 20-50pt wings | Target $1.50. Exit by 11AM. Avg hold 18min. | Vol crush + theta. See `0dte_iron_fly.md`. |
+| **JOIF** (Jim Olson) | ATM iron fly at open | Open, dynamic wings | IM-based wing sizing. Target $1.50. Exit by 11AM. | Vol-adaptive variant of 0DTE Fly. See `joif.md`. |
+| **Maria Shoe** | Iron fly at open | Open | Daily target $300. Hit target → stop. | Behavioral discipline. See `maria_shoe.md`. |
+| **Schwartz IC** (CBOE) | IC, 10pt wide, $1/side | Post-vol-spike | Set-and-forget. Close at $0.10 bid. | Post-vol mean reversion. See `schwartz_ic.md`. |
+| **MMMM's Ride or Die** | IC, 40-delta, 20pt wings | PM 12:30-3:00 ET, 30min apart. Mon 10AM variant. | SMA-10 filter. Stop = 250% credit. Max 4 tranches/day. | 18.7% CAGR, 10.1% max DD. See `mmmm_ride_or_die.md` for full backtest + GEX integration. |
 
 ## 4. Signal → Strategy Mapping
 
