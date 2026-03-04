@@ -7,7 +7,8 @@ Built as a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/sk
 ## What It Does
 
 - Fetches live GEX/CEX/DEX/VEX/Positioning data from optionsdepth.com via Puppeteer
-- Precomputes mechanical calculations: regime classification, key levels, coupling, velocity
+- Fetches real-time quotes, options chain, and market internals via Schwab API
+- Precomputes mechanical calculations: regime classification, key levels, coupling, velocity, strategy candidates
 - Claude analyzes the combined data using a structured framework (regime detection, key levels, flow analysis, synthesis)
 - Outputs a structured directional call with targets, stops, and confidence rating
 - Tracks prediction accuracy and adjusts signal weights over time
@@ -168,7 +169,7 @@ The data fetcher uses a dedicated Chrome profile to avoid conflicts with your ma
 ├── .env.example             # Config template
 ├── scripts/
 │   ├── fetch_data.js        # Puppeteer data fetcher for optionsdepth.com
-│   ├── compute.py           # Precompute: regime, levels, coupling, velocity
+│   ├── compute.py           # Precompute: regime, levels, shadow model, strategy candidates
 │   ├── fetch_0dte.js        # Spot/VIX/EM from 0dtespx.com
 │   ├── fetch_chain.py       # Options chain via yfinance (bid/ask/delta/volume)
 │   └── scheduler.js         # Auto-fetch scheduler
@@ -192,52 +193,59 @@ After 5+ scored predictions, signal weights auto-adjust based on hit rates. The 
 
 This public repo gives you the v2.5 analytical framework and the MEIC strategy — functional out of the box for GEX-based directional analysis.
 
-The **full framework** drops in on top of this repo and upgrades it with everything below.
+The **[full framework](https://github.com/shadwhand/gexbot-framework)** is a standalone repo that includes everything in this public repo plus the additions below.
 
-### Enhanced Analysis Engine (SKILL.md v2.6+)
+### Enhanced Analysis Engine (SKILL.md v2.7)
 
-The public v2.5 framework covers the core: GEX regime, CEX flows, key levels, VWAP, and synthesis. The full v2.6+ framework adds layers that compound on those basics:
+The public v2.5 framework covers the core: GEX regime, CEX flows, key levels, VWAP, and synthesis. The full v2.7 framework adds layers that compound on those basics:
 
 - **Market internals integration** — TICK, ADD, VOLD, TRIN regime scoring with breadth-price divergence detection. Internals confirm or contradict what the Greeks are saying.
-- **Shadow model** — a secondary bias computed from CEX path, positioning skew, and VEX direction. When the shadow model disagrees with the primary call, confidence drops. When they agree, it's a higher-conviction setup.
+- **Shadow model** — a secondary bias computed from wall gravity pin, CEX time discount, and structure volatility. When the shadow model disagrees with the primary call, confidence drops. When they agree, it's a higher-conviction setup.
 - **Gamma-charm coupling matrix** — maps how GEX walls interact with charm decay at different times of day. A +20K wall at 10 AM behaves differently than the same wall at 3 PM. The matrix captures that.
 - **Calibrated signal weights** — base weights adjusted from live prediction tracking. Signals that consistently hit get more weight; signals that miss get less. The framework learns from its own track record.
 - **Velocity and decay tracking** — CEX velocity (growing/shrinking/flipped/migrating) and GEX wall integrity (holding/weakening/crumbling) across updates. Tracks how the structure evolves intraday, not just where it sits at a single snapshot.
+- **Promoted rules from live trading** — GEX regime as range width predictor (not direction), walls beat magnets at close (VIX stable), bull overconfidence above dominant wall. Each rule earned promotion through 3+ confirming sessions.
 
-### Trade Strategies (6+)
+### Trade Strategies (10+)
 
-Each strategy has defined entry rules, Greeks targets, wing placement logic, adjustment triggers, and exit criteria — all calibrated against GEX/CEX structure:
+Iron condors, credit spreads, butterflies, and trend-following structures — each with defined entry rules, Greeks targets, wing placement logic, and exit criteria calibrated against GEX/CEX structure. MEIC (included in public repo) is the baseline; the full framework adds 9+ additional strategies.
 
-| Strategy | Description |
-|----------|-------------|
-| **0DTE Iron Fly** | ATM iron fly with GEX-informed wing placement. Uses wall proximity and CEX barriers to set strikes. |
-| **Breakeven IC** | Iron condor structured around breakeven points. Positioned using charm decay curves and positioning skew. |
-| **Schwartz IC** | Delta-managed iron condor with systematic adjustment rules at defined thresholds. |
-| **MMMM Ride-or-Die** | Momentum-following structure. Enters on confirmed trend with GEX amplifiers, rides until wall or CEX flip. |
-| **Crazy Ivan** | Reversal capture strategy. Waits for overextension into negative gamma zones, enters on first sign of mean reversion. |
-| **MEIC** | Mechanical entry iron condor (included in public repo). Rule-based, time-of-day filtered. |
+### Trade Execution
+
+- **Schwab integration** — `trade.js` reads strategy candidates from `candidates.json`, builds Schwab orders, places them with preview/execute workflow
+- **Exit brackets** — automatic per-side OCO exit orders on iron condors
+- **Dashboard** — terminal dashboard with auto-refresh showing open positions, P/L, exit bracket status
+- **EOD sweep** — `close-all` command cancels working orders and market-closes all positions
+
+### Schwab API Integration
+
+- **Real-time quotes** — SPX, VIX, and market internals (TICK, ADD, VOLD, TRIN) via Schwab REST API
+- **Options chain** — full SPX 0DTE chain with bid/ask/delta/gamma/theta/vega for strike selection and Greeks targeting
+- **Streaming daemon** — WebSocket daemon that streams TICK, ADD, VOLD, TRIN tick-by-tick, polls VIX9D, VIX3M, SKEW every 60s, and polls the 0DTE options chain every 30s. Writes rolling buffers that the fetcher reads automatically.
 
 ### Reference Library
 
 - **Signal theory (concepts.md)** — deep dives on VEX mechanics, positioning profile classification (hedged long, bearish hedge, speculative long, short squeeze setup), Greeks integration patterns, and how signals interact under different vol regimes.
 - **Annotated examples (examples.md)** — full session walkthroughs with data snapshots showing how the framework read the structure, what call it made, and what happened. Good and bad calls both included.
-- **Live trading lessons (lessons.md)** — confirmed patterns extracted from dozens of live sessions. Gap open behavior, nuclear gamma flips, floor migration, charm acceleration into close, and more. Patterns start as provisional (need 5+ confirming sessions) before promotion to the core framework.
-
-### Schwab API Integration
-
-- **Real-time quotes** — SPX, VIX, and market internals (TICK, ADD, VOLD, TRIN) via Schwab REST API
-- **Options chain** — full SPX chain with bid/ask/delta/gamma/theta/vega for strike selection and Greeks targeting
-- **Market internals streaming** — WebSocket daemon that streams TICK, ADD, VOLD, TRIN tick-by-tick and polls VIX9D, VIX3M, SKEW every 60s. Writes a rolling 10-minute buffer that the fetcher reads automatically.
+- **Live trading lessons (lessons.md)** — confirmed patterns extracted from live sessions. Gap open behavior, nuclear gamma flips, floor migration, charm acceleration into close, rebuilt ceiling traps, and more. Patterns start as provisional (need 5+ confirming sessions) before promotion to the core framework.
 
 ### Session Tracking
 
-- **Prediction log** — every directional call logged with signal breakdown. Score with `/feedback` to drive weight calibration.
-- **Retrospectives** — end-of-day session summaries. What worked, what missed, what to watch for next time.
+- **Prediction log** — every directional call logged with signal breakdown and shadow model comparison. Score with `/feedback` to drive weight calibration.
+- **Retrospectives** — end-of-day session summaries with accuracy breakdowns, phase analysis, and pattern extraction.
 - **Trading journal** — full session write-ups with timestamped analysis evolution.
 
 ### Setup
 
-The full framework installs as an overlay on this public repo. Clone this repo first, then drop in the framework files — replaces `SKILL.md` (v2.5 → v2.6+) and adds strategy/reference/data files. Everything else (fetcher, compute, scripts) stays the same.
+Clone the full framework repo directly:
+```bash
+git clone https://github.com/shadwhand/gexbot-framework.git gexbot
+cd gexbot
+npm install
+cp scripts/.env.example scripts/.env  # edit with Schwab + optionsdepth creds
+```
+
+Point your Claude Code skill symlink to the clone. All infrastructure scripts are included alongside the framework files.
 
 Contact [@shadwhand](https://github.com/shadwhand) for access.
 
