@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SPX Options Depth Scraper
+ * SPX Options Depth Data Fetcher
  */
 
 require('dotenv').config({ path: __dirname + '/.env' });
@@ -463,7 +463,7 @@ async function extractTable(page, label, shouldScroll = false, aggregate = false
 
 
 async function main() {
-  console.log('\n SPX Options Depth Scraper');
+  console.log('\n SPX Options Depth Fetcher');
   console.log(' ' + '─'.repeat(40) + '\n');
 
   // Step 0: Fetch spot/VIX — try Schwab first, fall back to 0dtespx.com

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 0dtespx.com Scraper — extracts SPX spot, VIX, and Expected Move
+ * 0dtespx.com Data Fetcher — extracts SPX spot, VIX, and Expected Move
  *
  * Hovers over the rightmost point of the main chart canvas to trigger
  * the tooltip, then reads SPX/EM/VIX from the tooltip DOM.
@@ -189,7 +189,7 @@ if (require.main === module) {
   const dateArg = process.argv[2] || null;
 
   (async () => {
-    console.log('\n 0DTE SPX Scraper');
+    console.log('\n 0DTE SPX Fetcher');
     console.log(' ' + '-'.repeat(40));
     if (dateArg) console.log(' Date: ' + dateArg);
     console.log('');

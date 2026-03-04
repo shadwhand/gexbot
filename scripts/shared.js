@@ -1,5 +1,5 @@
 /**
- * Shared utilities for SPX scrapers
+ * Shared utilities for SPX data fetchers
  */
 const fs = require('fs');
 const path = require('path');

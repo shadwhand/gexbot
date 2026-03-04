@@ -6,7 +6,7 @@ Built as a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/sk
 
 ## What It Does
 
-- Scrapes live GEX/CEX/DEX/VEX/Positioning data from optionsdepth.com via Puppeteer
+- Fetches live GEX/CEX/DEX/VEX/Positioning data from optionsdepth.com via Puppeteer
 - Precomputes mechanical calculations: regime classification, key levels, coupling, velocity
 - Claude analyzes the combined data using a structured framework (regime detection, key levels, flow analysis, synthesis)
 - Outputs a structured directional call with targets, stops, and confidence rating
@@ -24,7 +24,7 @@ Built as a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/sk
 
 ## Option A: Claude Code Skill (Recommended)
 
-Auto-fetches live data during market hours. Claude runs the scraper, computes levels, and analyzes — all from a single command.
+Auto-fetches live data during market hours. Claude runs the data fetcher, computes levels, and analyzes — all from a single command.
 
 Requires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (Anthropic's CLI tool).
 
@@ -44,7 +44,7 @@ cp .env.example .env
 
 Edit `.env` with your optionsdepth.com login:
 
-**Google SSO (default):** Set `LOGIN_METHOD=google`. The first time the scraper runs, Chrome opens and waits for you to sign in via Google. After that, the session persists in `.chrome-scraper-profile/` and subsequent runs auto-login. You do **not** need `OD_EMAIL` or `OD_PASSWORD`.
+**Google SSO (default):** Set `LOGIN_METHOD=google`. The first time the fetcher runs, Chrome opens and waits for you to sign in via Google. After that, the session persists in `.chrome-data-profile/` and subsequent runs auto-login. You do **not** need `OD_EMAIL` or `OD_PASSWORD`.
 
 **Email/password:** Set `LOGIN_METHOD=email` and fill in `OD_EMAIL` and `OD_PASSWORD`.
 
@@ -76,7 +76,7 @@ Launch Claude Code and type:
 ```
 
 Claude will:
-1. Run `npm run fetch` to scrape optionsdepth.com and compute precompute.json
+1. Run `npm run fetch` to fetch data from optionsdepth.com and compute precompute.json
 2. Read the output data
 3. Apply the analytical framework from SKILL.md
 4. Output a structured directional call with targets, stops, and confidence
@@ -85,7 +85,7 @@ You can also provide VWAP and VIX manually in your message for a more complete a
 
 ### 5. First run
 
-The first scrape opens a visible Chrome window. If using Google SSO, sign in manually — the session saves for future runs. After that, fetches run without interaction.
+The first run opens a visible Chrome window. If using Google SSO, sign in manually — the session saves for future runs. After that, fetches run without interaction.
 
 ---
 
@@ -129,9 +129,9 @@ Claude reads the SKILL.md framework from Project Knowledge and generates the sam
 
 ## Chrome Profile Setup
 
-The scraper uses a dedicated Chrome profile to avoid conflicts with your main browser session.
+The data fetcher uses a dedicated Chrome profile to avoid conflicts with your main browser session.
 
-**Default behavior:** A `.chrome-scraper-profile/` directory is auto-created in the repo root. This works out of the box.
+**Default behavior:** A `.chrome-data-profile/` directory is auto-created in the repo root. This works out of the box.
 
 **Using an existing profile:** If you need Google SSO and want to reuse an existing login:
 
@@ -145,7 +145,7 @@ The scraper uses a dedicated Chrome profile to avoid conflicts with your main br
    CHROME_PROFILE_PATH=/path/to/your/chrome/profile
    ```
 
-**Note:** Close Chrome before running the scraper if using your main profile, or you'll get a "user data directory already in use" error.
+**Note:** Close Chrome before running the fetcher if using your main profile, or you'll get a "user data directory already in use" error.
 
 ---
 
@@ -153,11 +153,11 @@ The scraper uses a dedicated Chrome profile to avoid conflicts with your main br
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `fetch` | `npm run fetch` | Scrape OD + compute precompute.json |
-| `fetch:aggregate` | `npm run fetch:aggregate` | Scrape with all-expiry sum (pre-market) |
+| `fetch` | `npm run fetch` | Fetch OD data + compute precompute.json |
+| `fetch:aggregate` | `npm run fetch:aggregate` | Fetch with all-expiry sum (pre-market) |
 | `compute` | `npm run compute` | Re-run compute.py on existing data |
 | `fetch:0dte` | `npm run fetch:0dte` | Fetch spot/VIX/EM from 0dtespx.com |
-| `reset-cookies` | `npm run reset-cookies` | Clear scraper session cookies |
+| `reset-cookies` | `npm run reset-cookies` | Clear session cookies |
 
 ---
 
@@ -167,7 +167,7 @@ The scraper uses a dedicated Chrome profile to avoid conflicts with your main br
 ├── SKILL.md                 # Core analytical framework v2.5 (loaded every invocation)
 ├── .env.example             # Config template
 ├── scripts/
-│   ├── fetch_data.js        # Puppeteer scraper for optionsdepth.com
+│   ├── fetch_data.js        # Puppeteer data fetcher for optionsdepth.com
 │   ├── compute.py           # Precompute: regime, levels, coupling, velocity
 │   ├── fetch_0dte.js        # Spot/VIX/EM from 0dtespx.com
 │   ├── fetch_chain.py       # Options chain via yfinance (bid/ask/delta/volume)
@@ -227,7 +227,7 @@ Each strategy has defined entry rules, Greeks targets, wing placement logic, adj
 
 - **Real-time quotes** — SPX, VIX, and market internals (TICK, ADD, VOLD, TRIN) via Schwab REST API
 - **Options chain** — full SPX chain with bid/ask/delta/gamma/theta/vega for strike selection and Greeks targeting
-- **Market internals streaming** — WebSocket daemon that streams TICK, ADD, VOLD, TRIN tick-by-tick and polls VIX9D, VIX3M, SKEW every 60s. Writes a rolling 10-minute buffer that the scraper reads automatically.
+- **Market internals streaming** — WebSocket daemon that streams TICK, ADD, VOLD, TRIN tick-by-tick and polls VIX9D, VIX3M, SKEW every 60s. Writes a rolling 10-minute buffer that the fetcher reads automatically.
 
 ### Session Tracking
 
@@ -237,7 +237,7 @@ Each strategy has defined entry rules, Greeks targets, wing placement logic, adj
 
 ### Setup
 
-The full framework installs as an overlay on this public repo. Clone this repo first, then drop in the framework files — replaces `SKILL.md` (v2.5 → v2.6+) and adds strategy/reference/data files. Everything else (scraper, compute, scripts) stays the same.
+The full framework installs as an overlay on this public repo. Clone this repo first, then drop in the framework files — replaces `SKILL.md` (v2.5 → v2.6+) and adds strategy/reference/data files. Everything else (fetcher, compute, scripts) stays the same.
 
 Contact [@shadwhand](https://github.com/shadwhand) for access.
 
