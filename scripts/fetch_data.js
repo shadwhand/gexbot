@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { fetch0dte } = require('./fetch_0dte');
-const { fetchQuotes, fetchOptionsChain, fetchInternals, hasCreds: hasSchwabCreds } = require('./schwab');
+const { fetchQuotes, hasCreds: hasSchwabCreds } = require('./schwab');
 
 function findChrome() {
   const candidates = [
@@ -471,8 +471,6 @@ async function main() {
   const skipSchwab = process.argv.includes('--skip-schwab');
   let spot0dte = null;
   let schwabQuotes = null;
-  let schwabChain = null;
-
   // Try Schwab API for spot/VIX (fast, no browser needed)
   if (!skipSchwab && hasSchwabCreds()) {
     console.log('Step 0a: Fetching spot/VIX from Schwab API...');
@@ -543,22 +541,6 @@ async function main() {
     await page.waitForSelector('tr[data-index]', { timeout: CONFIG.timeout });
     console.log('  Table found ✓');
 
-    // Optionally fetch Schwab options chain
-    if (!skipSchwab && hasSchwabCreds() && schwabQuotes?.spot) {
-      console.log('Fetching Schwab options chain...');
-      try {
-        const chainOpts = { strikeCount: 60 };
-        // 0DTE only
-        const today = new Date().toISOString().split('T')[0];
-        chainOpts.fromDate = today;
-        chainOpts.toDate = today;
-        schwabChain = await fetchOptionsChain(chainOpts);
-        console.log('  Chain: ' + schwabChain.calls.length + ' calls, ' + schwabChain.puts.length + ' puts\n');
-      } catch (err) {
-        console.log('  WARNING: Schwab chain fetch failed: ' + err.message + '\n');
-      }
-    }
-
     const timestamp = new Date().toISOString();
     const results = {
       timestamp,
@@ -575,73 +557,10 @@ async function main() {
         spot_change: schwabQuotes.spot_change,
         spot_pct_change: schwabQuotes.spot_pct_change,
         vix_change: schwabQuotes.vix_change,
-        tick: schwabQuotes.tick,
-        add: schwabQuotes.add,
-        vold: schwabQuotes.vold,
-        trin: schwabQuotes.trin,
         timestamp: schwabQuotes.spot_timestamp,
       } : null,
-      schwab_chain: schwabChain ? {
-        underlying: schwabChain.underlying,
-        calls_count: schwabChain.calls.length,
-        puts_count: schwabChain.puts.length,
-        calls: schwabChain.calls,
-        puts: schwabChain.puts,
-      } : null,
-      internals: null,
       data: {}
     };
-
-    // ── Market Internals: prefer streaming buffer, fall back to snapshot ──
-    const internalsBufferPath = path.join(__dirname, '..', 'data', 'internals_buffer.json');
-    let internalsSource = null;
-    try {
-      if (fs.existsSync(internalsBufferPath)) {
-        const bufferData = JSON.parse(fs.readFileSync(internalsBufferPath, 'utf-8'));
-        const lastUpdated = new Date(bufferData.last_updated);
-        const ageMs = Date.now() - lastUpdated.getTime();
-        if (ageMs < 2 * 60 * 1000) { // Updated within last 2 minutes
-          internalsSource = 'stream';
-          results.internals = {
-            source: 'stream',
-            tick: bufferData.current?.tick,
-            add: bufferData.current?.add,
-            vold: bufferData.current?.vold,
-            trin: bufferData.current?.trin,
-            window: bufferData.window || null,
-            tier2: bufferData.tier2 || null,
-            alerts: bufferData.alerts || [],
-            tick_count: bufferData.tick_count || 0,
-          };
-          console.log('  Internals: stream buffer (' + (bufferData.tick_count || 0) + ' readings)');
-        } else {
-          console.log('  Internals: buffer stale (' + Math.round(ageMs / 1000) + 's old), using snapshot');
-        }
-      }
-    } catch (err) {
-      console.log('  Internals: buffer read error: ' + err.message);
-    }
-
-    // Fallback: use snapshot from schwab quotes
-    if (!internalsSource && schwabQuotes) {
-      if (schwabQuotes.tick != null || schwabQuotes.add != null) {
-        results.internals = {
-          source: 'snapshot',
-          tick: schwabQuotes.tick,
-          add: schwabQuotes.add,
-          vold: schwabQuotes.vold,
-          trin: schwabQuotes.trin,
-          window: null,
-          tier2: null,
-          alerts: [],
-        };
-        console.log('  Internals: snapshot (TICK=' + schwabQuotes.tick + ' ADD=' + schwabQuotes.add + ')');
-      }
-    }
-
-    if (!results.internals) {
-      console.log('  Internals: unavailable (no stream, no Schwab quotes)')
-    }
 
     const aggregate = process.argv.includes('--aggregate');
     console.log('\nStep 5: Extracting data...');

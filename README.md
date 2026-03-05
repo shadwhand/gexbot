@@ -7,7 +7,7 @@ Built as a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/sk
 ## What It Does
 
 - Fetches live GEX/CEX/DEX/VEX/Positioning data from optionsdepth.com via Puppeteer
-- Fetches real-time quotes, options chain, and market internals via Schwab API
+- Fetches real-time SPX spot, VIX, and VIX-derived Expected Move via Schwab API (optional)
 - Precomputes mechanical calculations: regime classification, key levels, coupling, velocity, strategy candidates
 - Claude analyzes the combined data using a structured framework (regime detection, key levels, flow analysis, synthesis)
 - Outputs a structured directional call with targets, stops, and confidence rating
@@ -34,16 +34,20 @@ Requires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (Anthropi
 ```bash
 git clone https://github.com/shadwhand/gexbot.git
 cd gexbot
-npm install
+bash setup.sh    # Interactive setup (macOS/Linux)
+# or: powershell -ExecutionPolicy Bypass -File setup.ps1   (Windows)
 ```
 
-### 2. Configure credentials
+The setup script installs dependencies, configures credentials, and creates the Claude Code skill symlink.
+
+**Or manually:**
 
 ```bash
-cp .env.example .env
+npm install
+cp .env.example scripts/.env
 ```
 
-Edit `.env` with your optionsdepth.com login:
+Edit `scripts/.env` with your optionsdepth.com login:
 
 **Google SSO (default):** Set `LOGIN_METHOD=google`. The first time the fetcher runs, Chrome opens and waits for you to sign in via Google. After that, the session persists in `.chrome-data-profile/` and subsequent runs auto-login. You do **not** need `OD_EMAIL` or `OD_PASSWORD`.
 
@@ -128,6 +132,34 @@ Claude reads the SKILL.md framework from Project Knowledge and generates the sam
 
 ---
 
+## Option C: Manual Use (Any Claude Interface)
+
+Use the framework with any Claude interface — Claude.ai free tier, API, or third-party apps. You run the data pipeline manually and paste the output.
+
+### 1. Clone and set up
+
+```bash
+git clone https://github.com/shadwhand/gexbot.git
+cd gexbot
+bash setup.sh
+```
+
+### 2. Fetch data
+
+```bash
+npm run fetch
+```
+
+This opens Chrome, logs into optionsdepth.com, extracts GEX/CEX/DEX/VEX/Positioning, fetches spot/VIX (via Schwab if configured, otherwise 0dtespx.com), and runs `compute.py` to generate `data/precompute.json`.
+
+### 3. Paste into Claude
+
+Copy the contents of `data/precompute.json` and paste it into any Claude conversation along with the contents of `SKILL.md`. Claude will apply the framework and generate the directional analysis.
+
+For updates during the session, re-run `npm run fetch` and paste the new `precompute.json`.
+
+---
+
 ## Chrome Profile Setup
 
 The data fetcher uses a dedicated Chrome profile to avoid conflicts with your main browser session.
@@ -167,10 +199,13 @@ The data fetcher uses a dedicated Chrome profile to avoid conflicts with your ma
 ```
 ├── SKILL.md                 # Core analytical framework v2.5 (loaded every invocation)
 ├── .env.example             # Config template
+├── setup.sh                 # Interactive setup (macOS/Linux)
+├── setup.ps1                # Interactive setup (Windows)
 ├── scripts/
 │   ├── fetch_data.js        # Puppeteer data fetcher for optionsdepth.com
+│   ├── schwab.js            # Schwab API client (SPX spot, VIX, EM)
 │   ├── compute.py           # Precompute: regime, levels, shadow model, strategy candidates
-│   ├── fetch_0dte.js        # Spot/VIX/EM from 0dtespx.com
+│   ├── fetch_0dte.js        # Spot/VIX/EM from 0dtespx.com (fallback)
 │   ├── fetch_chain.py       # Options chain via yfinance (bid/ask/delta/volume)
 │   └── scheduler.js         # Auto-fetch scheduler
 ├── data/
@@ -217,9 +252,11 @@ Iron condors, credit spreads, butterflies, and trend-following structures — ea
 - **Dashboard** — terminal dashboard with auto-refresh showing open positions, P/L, exit bracket status
 - **EOD sweep** — `close-all` command cancels working orders and market-closes all positions
 
-### Schwab API Integration
+### Extended Schwab API Integration
 
-- **Real-time quotes** — SPX, VIX, and market internals (TICK, ADD, VOLD, TRIN) via Schwab REST API
+The public repo includes Schwab for SPX spot, VIX, and EM. The full framework extends this with:
+
+- **Market internals** — TICK, ADD, VOLD, TRIN via Schwab REST API
 - **Options chain** — full SPX 0DTE chain with bid/ask/delta/gamma/theta/vega for strike selection and Greeks targeting
 - **Streaming daemon** — WebSocket daemon that streams TICK, ADD, VOLD, TRIN tick-by-tick, polls VIX9D, VIX3M, SKEW every 60s, and polls the 0DTE options chain every 30s. Writes rolling buffers that the fetcher reads automatically.
 
