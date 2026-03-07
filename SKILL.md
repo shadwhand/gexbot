@@ -3,7 +3,7 @@ name: spx-gex-analyzer
 description: Use when analyzing SPX with auto-fetching from optionsdepth.com. Generates directional bias calls using GEX, CEX, DEX, VEX, Positioning, VWAP, and Expected Move data. Use /spx-gex-analyzer or /analyze with no data to auto-fetch.
 ---
 
-# SPX Directional Indicator v2.5
+# SPX Directional Indicator v2.6
 
 ## Data Files
 - **predictions.json:** `data/predictions.json`
@@ -37,6 +37,20 @@ CEX scales ~2x in final 30 min. VEX only matters when VIX intraday range >1.5 pt
 ## Directional Language
 
 Describe strikes relative to the number line. 6895 is below 6900. Price falling from 6920 hits 6900 first, then 6895. List levels in order of encounter from spot.
+
+### Level Vocabulary
+
+| Term | Definition | When to Use |
+|---|---|---|
+| **wall** | +GEX — dealers long gamma, dampens movement | Base term for any significant +GEX strike |
+| **floor** | +GEX wall below spot | Wall acting as support |
+| **ceiling** | +GEX wall above spot | Wall acting as resistance |
+| **amplifier / amp** | -GEX — dealers short gamma, accelerates movement | Base term for any significant -GEX strike |
+| **trap door** | Amp sitting directly below a floor | Floor loss = fast drop through thin liquidity |
+| **stall** | Weak/thin +GEX zone | Momentum fades but no hard rejection |
+| **pivot** | CEX equilibrium (charm zero-crossing) | Where price gravitates in low-vol sessions |
+| **flip zone** | Gamma flip strike (net GEX sign change) | Above = friction (+GEX). Below = acceleration (-GEX) |
+| **chop range** | Corridor between upper and lower walls | The structural range |
 
 ---
 
@@ -73,15 +87,18 @@ Gap = VWAP - spot. Positive = upside bias. Negative = downside bias. -CEX near V
 
 **EM Check:** Targets within EM = standard. Beyond EM = reduce confidence by 1 unless 3+ signals aligned.
 
-### 5. Time-of-Day Weighting
+### 5. Time-of-Day Windows
 
-| Time Left | CEX Wt | GEX Wt |
-|-----------|--------|--------|
-| >3h | 0.40 | 0.60 |
-| 2-3h | 0.55 | 0.45 |
-| 1-2h | 0.70 | 0.30 |
-| <1h | 0.85 | 0.15 |
-| <30m | 0.95 | 0.05 |
+Weights apply to the *directional call*, not level importance. Based on 0DTE charm decay (θ ∝ 1/√T).
+
+| Window | Time (ET) | CEX Wt | GEX Wt |
+|--------|-----------|--------|--------|
+| Open | 9:30–10:30 | 0.30 | 0.70 |
+| Morning | 10:30–11:30 | 0.35 | 0.65 |
+| Lunch | 11:30–13:15 | 0.40 | 0.60 |
+| Afternoon | 13:15–15:00 | 0.55 | 0.45 |
+| Power Hour | 15:00–15:45 | 0.80 | 0.20 |
+| Close | 15:45–16:00 | 0.97 | 0.03 |
 
 ### 6. Synthesize Call
 
