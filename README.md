@@ -226,15 +226,26 @@ After 5+ scored predictions, signal weights auto-adjust based on hit rates. The 
 
 ## Full Framework
 
-The public repo covers the core analytical engine, data pipeline, and MEIC strategy. The **[full framework](https://github.com/shadwhand/gexbot-framework)** extends it with:
+The public repo covers the core analytical engine, data pipeline, and MEIC strategy. The **[full framework](https://github.com/shadwhand/gexbot-framework)** (v3.0) takes it further.
 
-- **Enhanced analysis engine (v2.7)** — market internals integration, shadow model, gamma-charm coupling, velocity/decay tracking, and self-calibrating signal weights
-- **10+ strategy playbooks** — iron condors, credit spreads, butterflies, and trend-following structures with GEX-calibrated entry/exit rules
-- **Schwab API trade execution** — order placement, exit brackets, position dashboard, and EOD sweep
-- **Real-time streaming** — WebSocket daemon for TICK, ADD, VOLD, TRIN, options chain, and VIX term structure
-- **Reference library** — signal theory deep dives, annotated session walkthroughs, positioning profiles, and vol regime playbooks
-- **Live trading lessons** — 26+ confirmed patterns from real sessions, promoted to the framework after repeated validation
-- **Session tracking** — prediction log with scoring, retrospectives, and weight adjustment
+### What's new in v3.0
+
+**The indicator knows what time it is.** Calls no longer target the close from 9:30 AM. Six time windows — each with its own CEX/GEX weight curve modeled on how 0DTE charm actually decays — scope the call to the current market phase. The last 15 minutes get their own window because that's when levered ETF rebalancing and MOC orders override everything else.
+
+**Every strategy adapts to your risk tolerance.** All 10+ strategy generators produce Conservative, Normal, and Aggressive candidates with strike selection that accounts for GEX structure, expected move, and ATR bands. One command, three tiers.
+
+**Macro regime awareness.** The framework tracks vol regime, cross-asset stress, and geopolitical catalysts with built-in staleness decay. It knows when its own data is getting stale and downgrades accordingly.
+
+**Automated execution.** A scheduler loop pulls data, confirms internals, and places METF trend-following spreads — limit orders with retry, logging, and notifications. The Schwab integration handles the full lifecycle: order placement, exit brackets, live dashboard, EOD sweep.
+
+### Also in the full framework
+
+- Shadow model that independently validates every call
+- 31 live trading lessons with pattern-matching triggers
+- VVIX/VIX ratio framework, VIX decomposition, vol beta coiled spring detection
+- Standardized level vocabulary across all output (floors, ceilings, trap doors, flip zones)
+- Window-based prediction scoring — calls graded against the right timeframe, not just the close
+- Streaming daemon for real-time TICK, ADD, VOLD, TRIN, VIX term structure, and 0DTE chain
 
 Contact [@shadwhand](https://github.com/shadwhand) for access.
 
