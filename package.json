@@ -1,6 +1,6 @@
 {
   "name": "spx-gex-analyzer",
-  "version": "1.0.0",
+  "version": "2.6.0",
   "description": "SPX GEX/CEX directional indicator — automated data fetching via system Chrome",
   "scripts": {
     "fetch": "node scripts/fetch_data.js",
@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "dotenv": "^16.0.0",
-    "puppeteer": "^23.0.0"
+    "puppeteer": "^23.0.0",
+    "schwab-client-js": "^1.1.3"
   }
 }
