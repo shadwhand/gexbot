@@ -11,20 +11,47 @@ Built as a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/sk
 - Outputs a structured directional call with targets, stops, and confidence rating
 - Tracks prediction accuracy and adjusts signal weights over time
 
-## Requirements
+---
 
-- [optionsdepth.com](https://optionsdepth.com) subscription (data source)
-- Node.js 18+
-- Google Chrome installed
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (for auto-fetch) or a Claude Pro/Team subscription (for manual use)
+## Prerequisites
+
+Install these before starting. If you already have them, skip to [Download & Install](#download--install).
+
+### 1. Google Chrome
+
+Download and install from [google.com/chrome](https://www.google.com/chrome/). The scraper uses Chrome to log in to optionsdepth.com.
+
+### 2. Node.js (v18 or newer)
+
+Download the **LTS** version from [nodejs.org](https://nodejs.org/). Run the installer and accept all defaults.
+
+To verify it installed correctly, open a terminal and run:
+
+```
+node --version
+```
+
+You should see something like `v20.11.0` or higher. If you get "command not found" or "not recognized", restart your terminal and try again.
+
+> **How to open a terminal:**
+> - **Windows**: Press `Win + R`, type `cmd`, press Enter. Or search "Command Prompt" in the Start menu.
+> - **Mac**: Press `Cmd + Space`, type "Terminal", press Enter.
+> - **Linux**: Press `Ctrl + Alt + T`, or find Terminal in your applications menu.
+
+### 3. optionsdepth.com subscription
+
+Sign up at [optionsdepth.com](https://optionsdepth.com). You need an active subscription for the scraper to pull data.
+
+### 4. Claude (one of the following)
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — for auto-fetch integration (recommended)
+- [Claude Pro or Team](https://claude.ai) — for manual data pasting (no auto-fetch)
 
 ---
 
-## Install — Claude Code (Recommended)
+## Download & Install
 
-Auto-fetches data during market hours. Full skill integration.
-
-### 1. Clone and install
+### Option A: Using Git (if you have it)
 
 ```bash
 git clone https://github.com/shadwhand/gexbot.git
@@ -32,16 +59,83 @@ cd gexbot
 npm install
 ```
 
-### 2. Configure credentials
+### Option B: Download ZIP (no Git needed)
 
+1. Go to [github.com/shadwhand/gexbot](https://github.com/shadwhand/gexbot)
+2. Click the green **Code** button, then click **Download ZIP**
+3. Extract (unzip) the downloaded file
+
+4. **Find the right folder.** Open the extracted folder in your file manager. You need to be in the folder that contains `package.json`, `README.md`, and a `scripts/` folder. If you see another folder inside (like `gexbot-main`), open **that** folder — that's the one you want.
+
+5. **Open a terminal in that folder:**
+   - **Windows**: Open the folder in File Explorer, click the address bar at the top, type `cmd`, and press Enter. A Command Prompt window will open in the correct folder.
+   - **Mac**: Right-click the folder in Finder, then select **Services** > **New Terminal at Folder**. (Or open Terminal and type `cd ` then drag the folder into the Terminal window and press Enter.)
+   - **Linux**: Right-click inside the folder and select **Open Terminal Here**.
+
+6. **Install dependencies** by running this command:
+
+   ```
+   npm install
+   ```
+
+   This will take a minute. When it finishes, you should see a `node_modules/` folder appear inside the project folder. That means it worked.
+
+---
+
+## Configure Credentials
+
+You need to create a settings file with your optionsdepth.com login.
+
+### 1. Copy the example file
+
+**Mac / Linux:**
 ```bash
 cp scripts/.env.example scripts/.env
-# Edit scripts/.env with your optionsdepth.com login
 ```
 
-### 3. Add as a Claude Code skill
+**Windows (Command Prompt):**
+```cmd
+copy scripts\.env.example scripts\.env
+```
 
-Add to your Claude Code settings (`~/.claude/settings.json` or project `.claude/settings.json`):
+**Windows (PowerShell):**
+```powershell
+Copy-Item scripts\.env.example scripts\.env
+```
+
+### 2. Edit the settings file
+
+Open `scripts/.env` in any text editor (Notepad, VS Code, TextEdit, etc.) and fill in your login method:
+
+**If you log in to optionsdepth with Google:**
+```
+LOGIN_METHOD=google
+```
+That's it — the scraper will open Chrome and let you sign in manually the first time.
+
+**If you log in with email and password:**
+```
+LOGIN_METHOD=email
+OD_EMAIL=your@email.com
+OD_PASSWORD=yourpassword
+```
+
+All other settings in the file are optional — the defaults work fine for most users.
+
+---
+
+## Setup: Claude Code (Recommended)
+
+Auto-fetches data during market hours. Full skill integration.
+
+### 1. Add as a Claude Code skill
+
+Add the path to your `gexbot` folder in your Claude Code settings file. The settings file is at:
+
+- **Mac / Linux**: `~/.claude/settings.json`
+- **Windows**: `C:\Users\YourName\.claude\settings.json`
+
+Add this (use the actual path to where you put gexbot):
 
 ```json
 {
@@ -51,9 +145,14 @@ Add to your Claude Code settings (`~/.claude/settings.json` or project `.claude/
 }
 ```
 
-### 4. Use it
+**Example paths:**
+- Mac: `"/Users/yourname/gexbot"`
+- Windows: `"C:\\Users\\YourName\\Downloads\\gexbot"` (note the double backslashes)
+- Linux: `"/home/yourname/gexbot"`
 
-In Claude Code:
+### 2. Use it
+
+In Claude Code, type:
 ```
 /spx-gex-analyzer
 ```
@@ -62,13 +161,13 @@ Claude will auto-fetch data from optionsdepth.com, then analyze it. Provide VWAP
 
 ---
 
-## Install — Regular Claude (Projects)
+## Setup: Regular Claude (Manual)
 
-No auto-fetch. Paste data manually.
+No auto-fetch — you paste data manually.
 
 ### 1. Create a Claude Project
 
-Go to [claude.ai](https://claude.ai) → Projects → New Project.
+Go to [claude.ai](https://claude.ai) > Projects > New Project.
 
 ### 2. Add the framework
 
@@ -87,7 +186,7 @@ Paste GEX/CEX/DEX/VEX/Positioning data from optionsdepth.com's table view into t
 
 ---
 
-### Optional: Schwab API for Auto Spot/VIX/EM
+## Optional: Schwab API for Auto Spot/VIX/EM
 
 The scraper can auto-fetch SPX spot, VIX, and Expected Move from Schwab's API. Without Schwab, it falls back to scraping 0dtespx.com.
 
@@ -103,7 +202,11 @@ The scraper can auto-fetch SPX spot, VIX, and Expected Move from Schwab's API. W
 
 Token expires every 7 days — re-run `npx schwab-authorize` to refresh.
 
-### Fetch Flags
+> **Windows note:** Your firewall may ask to allow Node.js access. Click **Allow** — this is needed for the OAuth callback on localhost.
+
+---
+
+## Fetch Flags
 
 ```bash
 npm run fetch                          # Standard 0DTE fetch
@@ -113,15 +216,28 @@ npm run fetch -- --skip-schwab         # Skip Schwab, use 0dtespx only
 npm run fetch -- --skip-0dte           # Skip 0dtespx fallback
 ```
 
-Strike range is auto-computed from spot ± 2×EM. Override with `STRIKE_FLOOR`/`STRIKE_CEIL` in `.env`.
+Strike range is auto-computed from spot +/- 2x EM. Override with `STRIKE_FLOOR`/`STRIKE_CEIL` in `.env`.
 
 ---
 
-## Chrome Profile Setup
+## Chrome Profile
 
 Chrome user data directory is auto-detected on macOS, Linux, and Windows. Override with `CHROME_PROFILE_PATH` in `.env` if needed.
 
-**Note:** Close Chrome before running the scraper if using your main profile, or you'll get a "user data directory already in use" error.
+**Note:** Close all Chrome windows before running the scraper if using your main profile, or you'll get a "user data directory already in use" error.
+
+---
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `npm: command not found` or `npm is not recognized` | Node.js isn't installed | Install from [nodejs.org](https://nodejs.org/), then **restart your terminal** |
+| `ENOENT: no such file or directory, open '.../package.json'` | You're in the wrong folder | Navigate into the folder that contains `package.json` (see [step 4](#option-b-download-zip-no-git-needed) above) |
+| `Could not find Chrome` | Chrome not installed or in a non-standard location | Install Chrome, or set `CHROME_PROFILE_PATH` in `.env` |
+| `user data directory is already in use` | Chrome is open | Close **all** Chrome windows, then try again |
+| `ERR_CONNECTION_REFUSED` during Schwab auth | Firewall blocking localhost | Allow Node.js through your firewall |
+| `Cannot find module` after npm install | Incomplete install | Delete the `node_modules` folder and run `npm install` again |
 
 ---
 

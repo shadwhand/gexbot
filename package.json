@@ -4,7 +4,7 @@
   "description": "SPX GEX/CEX directional indicator — automated data fetching via system Chrome",
   "scripts": {
     "fetch": "node scripts/fetch_data.js",
-    "reset-cookies": "rm -f scripts/.session_cookies.json && echo 'Cookies cleared'"
+    "reset-cookies": "node -e \"try{require('fs').unlinkSync('scripts/.session_cookies.json')}catch(e){}; console.log('Cookies cleared')\""
   },
   "dependencies": {
     "dotenv": "^16.0.0",
